@@ -18,7 +18,8 @@ double rad2deg(double x);
 
 double distance(double x1, double y1, double x2, double y2);
 
-int getLane(double d);
+int getLane(double d, const double laneWidth=4.0);
+double getLaneOffsetS(int lane_number, const double laneWidth=4.0);
 
 int ClosestWaypoint(double x, double y,
 	                const vector<double> &maps_x, const vector<double> &maps_y);

@@ -67,9 +67,11 @@ int main() {
   }
 
   // interpolate waypoint coordinates with cubic splines
-  tk::spline wp_x_interp, wp_y_interp;
-  wp_x_interp.set_points(map_waypoints_s, map_waypoints_x);
-  wp_y_interp.set_points(map_waypoints_s, map_waypoints_y);
+  tk::spline wp_x_interp, wp_y_interp, wp_dx_interp, wp_dy_interp;
+  wp_x_interp.set_points(map_waypoints_s,  map_waypoints_x);
+  wp_y_interp.set_points(map_waypoints_s,  map_waypoints_y);
+  wp_dx_interp.set_points(map_waypoints_s, map_waypoints_dx);
+  wp_dy_interp.set_points(map_waypoints_s, map_waypoints_dy);
 
   // Vehicle(int lane, double s, double v, double a, string state="CS")
   Vehicle ego_vehicle;
@@ -78,9 +80,9 @@ int main() {
   // setPriorities(double reachGoal, double efficiency);
   ego_vehicle.setPriorities(6, 1); 
 
-
-  h.onMessage([&wp_x_interp, &wp_y_interp, &other_vehicles, &ego_vehicle,
-               &map_waypoints_x, &map_waypoints_y, &map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy]
+  double last_s; 
+  h.onMessage([&other_vehicles, &ego_vehicle,&wp_x_interp, &last_s,
+               &wp_y_interp, &wp_dx_interp, &wp_dy_interp, &map_waypoints_x, &map_waypoints_y, &map_waypoints_s]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
   {
     // "42" at the start of the message means there's a websocket message event.
@@ -106,9 +108,6 @@ int main() {
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];
-          double car_speed_x = car_speed * cos(deg2rad(car_yaw));
-          double car_speed_y = car_speed * sin(deg2rad(car_yaw));
-
           // Previous path data given to the Planner
           auto previous_path_x = j[1]["previous_path_x"];
           auto previous_path_y = j[1]["previous_path_y"];
@@ -142,7 +141,7 @@ int main() {
           cout << "own_x=" << car_x << ", own_y=" << car_y << ", own_yaw=" << car_yaw << ", own_speed=" << car_speed
                << ", own_s=" << car_s << ", own_d=" << car_d << ", lane=" << getLane(car_d) << endl;
 
-          const double time_horizon = 2.0; // seconds
+          const double time_horizon = 1.0; // seconds
           const double dt = 0.02; // seconds          
           const double target_speed_mps = 50; // miles per hour
           const double target_speed_ms = target_speed_mps * 1.6 / 3.6; // meters per second
@@ -150,6 +149,7 @@ int main() {
           const int waypoint_cnt = time_horizon / dt;
 
           double pos_x, pos_y, pos_s, angle;
+          int lane_num = 2;
           vector<double> next_x_vals;
           vector<double> next_y_vals;
           int previous_path_size = previous_path_x.size();
@@ -168,9 +168,7 @@ int main() {
               double pos_x2 = previous_path_x[previous_path_size-2];
               double pos_y2 = previous_path_y[previous_path_size-2];
               angle = atan2(pos_y-pos_y2, pos_x-pos_x2);
-              auto endpoint = getFrenet(pos_x, pos_y, angle,
-                                        map_waypoints_x, map_waypoints_y);
-              pos_s = endpoint[0];
+              pos_s = end_path_s;
 
               // add remaining waypoints from previous list into the new list
               for(int i = 0; i < previous_path_size; i++)  {
@@ -178,12 +176,23 @@ int main() {
                   next_y_vals.push_back(previous_path_y[i]);
               }
           }  
-          // add new waypoints to new list
-          for(int i = 0; i < waypoint_cnt - previous_path_size; i++) {
-              next_x_vals.push_back(wp_x_interp(pos_s + i*dist_inc));
-              next_y_vals.push_back(wp_y_interp(pos_s + i*dist_inc));
-          }
 
+          // add new waypoints to new list
+          double new_s;
+          for(int i = 0; i < waypoint_cnt - previous_path_size; i++) {
+          //for(int i = 0; i < waypoint_cnt; i++) { 
+              new_s += dist_inc;
+              double x = wp_x_interp(new_s) + getLaneOffsetS(lane_num)*wp_dx_interp(new_s);
+              double y = wp_y_interp(new_s) + getLaneOffsetS(lane_num)*wp_dy_interp(new_s);
+              cout << "distance in s-direction between wps: " << distance(pos_x, pos_y, x, y)
+                   << ", old: " << pos_x << " / " << pos_y << ", new: " << x << " / " << y << endl;
+              pos_x = x;
+              pos_y = y;
+              next_x_vals.push_back(x);
+              next_y_vals.push_back(y);
+          }
+          last_s = new_s;
+          cout << "end_path_s: " << end_path_s << ", last_s: " << last_s << endl;
           int cur_wp_idx = NextWaypoint(car_x, car_y, angle, map_waypoints_x, map_waypoints_y);
           cout << "previous_path_size: " << previous_path_size << endl;
           cout << "next wp idx: " << cur_wp_idx << ", x=" << map_waypoints_x[cur_wp_idx]

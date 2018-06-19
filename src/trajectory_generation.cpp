@@ -465,22 +465,19 @@ vector<double> JMT(vector< double> start, vector <double> end, double T)
     INPUTS
 
     start - the vehicles start location given as a length three array
-        corresponding to initial values of [s, s_dot, s_double_dot]
+            corresponding to initial values of [s, s_dot, s_double_dot]
 
     end   - the desired end state for vehicle. Like "start" this is a
-        length three array.
+            length three array.
 
     T     - The duration, in seconds, over which this maneuver should occur.
 
     OUTPUT 
     an array of length 6, each value corresponding to a coefficent in the polynomial 
     s(t) = a_0 + a_1 * t + a_2 * t**2 + a_3 * t**3 + a_4 * t**4 + a_5 * t**5
+
     */
 
-    // Those are the equations:
-    // Ab = c
-    // b = c * A^-1
-    
     double T2, T3, T4, T5;
     T2 = T*T;
     T3 = T2*T;
@@ -490,7 +487,7 @@ vector<double> JMT(vector< double> start, vector <double> end, double T)
     MatrixXd c(3,1);
     c << end[0] - (start[0] + start[1]*T + 0.5*start[2]*T2),
          end[1] - (start[1] + start[2]*T),
-         end[2] - start[2];
+         end[2] -  start[2];
 
     MatrixXd A(3,3);
     A <<   T3,    T4,    T5,
@@ -499,7 +496,7 @@ vector<double> JMT(vector< double> start, vector <double> end, double T)
 
     MatrixXd b = A.inverse() * c;
     
-    return {start[0],    start[1],    0.5*start[2],
-            b.data()[0], b.data()[1], b.data()[2]};
+    return {start[0], start[1], 0.5*start[2],
+            b(0),     b(1),     b(2)};
 }
 

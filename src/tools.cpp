@@ -21,14 +21,17 @@ double distance(double x1, double y1, double x2, double y2) {
 }
 
 
-int getLane(double d) {
-	const double laneWidth = 4.0; // meters
+int getLane(double d, const double laneWidth) {
 	for (int lane = 0; lane < 4; lane++) {
 		if (d > laneWidth*lane && d <= laneWidth*(lane+1)) {
 			return lane;
 		}
 	}
 	return 0;
+}
+
+double getLaneOffsetS(int lane_number, const double laneWidth) {
+	return (laneWidth*lane_number) + 2.0;
 }
 
 int ClosestWaypoint(double x, double y,
@@ -166,6 +169,7 @@ double polyeval(vector<double> &coeffs, double x)
 	}
 	return result;
 }
+
 double polyeval(Eigen::VectorXd &coeffs, double x)
 {
 	double result = 0.0;
