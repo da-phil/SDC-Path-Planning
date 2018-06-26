@@ -16,6 +16,7 @@ set(CXX_FLAGS "-Wall")
 set(sources
 	src/main.cpp
 	src/tools.cpp
+	src/trackmap.cpp
 	src/trajectory_generation.cpp
 	src/trajectory_classification.cpp
 )

@@ -80,6 +80,6 @@ double inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & trajec
 double lane_speed(const map<int, vector<Vehicle>> & predictions, int lane);
 map<string, double> get_helper_data(const Vehicle & vehicle, const vector<Vehicle> & trajectory,
 	                                const map<int, vector<Vehicle>> & predictions);
-vector<double> JMT(vector< double> start, vector <double> end, double T);
+
 
 #endif // TRAJECTORY_GENERATION_HPP
