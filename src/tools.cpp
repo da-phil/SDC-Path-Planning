@@ -22,6 +22,17 @@ double distance(double x1, double y1, double x2, double y2) {
 	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
 }
 
+double norm(double x, double y) {
+	return sqrt(x*x + y*y);
+}
+
+double mph2mps(double mph) {
+	return mph * 1.6 / 3.6; 
+}
+
+double mps2mph(double mps) {
+	return mps * 3.6 / 1.6; 
+}
 
 int getLane(const double d, const double laneWidth) {
 	for (int lane = 0; lane <= 2; lane++) {
@@ -127,28 +138,6 @@ vector<double> polyfit_wp(int wp_start, int wp_stop, int order,
 	VectorXd result_eig = Q.solve(yvals_eig);
 	vector<double> result(result_eig.data(), result_eig.data() + result_eig.size());
 	return result;
-}
-
-void polyeval_wp(const vector<double> &coeffs, int wp_start, int wp_stop, int num_points,
-                 const vector<double> &map_x, const vector<double> &map_y,
-                 vector<double> &wp_interp_x, vector<double> &wp_interp_y)
-{
-	assert(map_x.size() == map_y.size());
-	assert(wp_interp_x.size() == wp_interp_y.size());
-	// make sure indicies for map_x and map_y wrap around map size!
-	wp_start = wp_start % map_x.size();
-	wp_stop  = wp_stop  % map_x.size();
-	double dx = 0.5;
-	for (int j = 0; j < num_points; j++)
-	{
-		double y = 0;
-		double x = map_x[wp_start] + j*dx;
-		for (int i = 0; i < coeffs.size(); i++) {
-			y += coeffs[i] * pow(x, i);
-		}
-		wp_interp_x.push_back(x);
-		wp_interp_y.push_back(y);
-	}
 }
 
 

@@ -174,6 +174,14 @@ vector<double> trackmap::getFrenet(double x, double y, double theta) const
 }
 
 
+// Transform from Cartesian x,y coordinates to Frenet s,d coordinates
+vector<double> trackmap::getFrenetInterp(double x, double y, double theta) const
+{
+	cout << "TODO: implement getFrenetInterp()!" << endl;
+	return {};
+}
+
+
 // Transform from Frenet s,d coordinates to Cartesian x,y
 vector<double> trackmap::getXY(double s, double d) const
 {

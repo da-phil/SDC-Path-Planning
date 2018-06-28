@@ -13,6 +13,9 @@ double deg2rad(double x);
 double rad2deg(double x);
 
 double distance(double x1, double y1, double x2, double y2);
+double norm(double x, double y);
+double mph2mps(double mph);
+double mps2mph(double mps);
 
 int getLane(const double d, const double laneWidth=4.0);
 double getLaneOffsetD(const int lane_number, const double laneWidth=4.0);

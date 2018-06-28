@@ -27,6 +27,7 @@ public:
 
 	// Transform from Cartesian x,y coordinates to Frenet s,d coordinates
 	vector<double> getFrenet(double x, double y, double theta) const;
+	vector<double> getFrenetInterp(double x, double y, double theta) const;
 
 	// Transform from Frenet s,d coordinates to Cartesian x,y
 	vector<double> getXY(double s, double d) const;
@@ -47,6 +48,8 @@ public:
 	tk::spline y_interp;
 	tk::spline dx_interp;
 	tk::spline dy_interp;
+
+	const double max_s = 6945.554;
 };
 
 

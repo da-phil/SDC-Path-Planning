@@ -44,14 +44,14 @@ void trajectory_lanechange(const vector<double> start_s,  const vector<double> s
     auto d_params = JMT(start_d, {getLaneOffsetD(lane_number), 0.0, 0.0}, T);              
     int waypoint_cnt = T / dt;
 
-    cout << "sending " << waypoint_cnt << " waypoints!" << endl;
+    //cout << "sending " << waypoint_cnt << " waypoints!" << endl;
 
-    vector<double> s_list(waypoint_cnt);
-    vector<double> d_list(waypoint_cnt);  
-    for(int i = 0; i < waypoint_cnt; i++) { 
-        s_list[i] = polyeval(s_params, dt*i);
+    vector<double> s_list(waypoint_cnt+1);
+    vector<double> d_list(waypoint_cnt+1);  
+    for(int i = 0; i <= waypoint_cnt; i++) { 
+        s_list[i] = fmod(polyeval(s_params, dt*i), max_s);
         d_list[i] = polyeval(d_params, dt*i);
-        cout << "new_s: " << s_list[i] << ", new_d: " << d_list[i] << endl;
+        //cout << "new_s: " << s_list[i] << ", new_d: " << d_list[i] << endl;
     }
     map_interp.getXYMapAtSD(s_list, d_list, next_x_vals, next_y_vals);
 }
@@ -63,14 +63,23 @@ int main() {
   // Waypoint map to read from, waypoints are interpolated with cubic splines
   trackmap map_interp("../data/highway_map.csv");
 	double end_path_s, end_path_d;
+	double target_speed_mph = 46;
+	double target_speed_mps = mph2mps(target_speed_mph);
   // Vehicle(int lane, double s, double v, double a, string state="CS")
   Vehicle ego_vehicle;
+  // configure(int target_speed, int lanes_available, int goal_s, int goal_lane, int max_acceleration)
+  ego_vehicle.configure(target_speed_mps, 3, max_s+1.0, 0, 4.0);
+  ego_vehicle.state = "KL";
+
   map<int, Vehicle> other_vehicles;
+
+  bool car_starting = true;
 
   // setPriorities(double reachGoal, double efficiency);
   ego_vehicle.setPriorities(6, 1); 
 
-  h.onMessage([&other_vehicles, &ego_vehicle, &map_interp, &end_path_s, &end_path_d]
+  h.onMessage([&other_vehicles, &ego_vehicle, &map_interp, &end_path_s, &end_path_d, &car_starting,
+  						 &target_speed_mph, &target_speed_mps]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
   {
     // "42" at the start of the message means there's a websocket message event.
@@ -80,7 +89,7 @@ int main() {
     //cout << sdata << endl;
     if (length && length > 2 && data[0] == '4' && data[1] == '2')
     {
-      auto s = hasData(data);
+      auto s = hasData(string(data));
       if (s != "") {
         auto j = json::parse(s);
         
@@ -100,87 +109,75 @@ int main() {
           auto previous_path_x = j[1]["previous_path_x"];
           auto previous_path_y = j[1]["previous_path_y"];
           // Previous path's end s and d values 
-          //double end_path_s = j[1]["end_path_s"];
-          //double end_path_d = j[1]["end_path_d"];
+          double end_path_s = j[1]["end_path_s"];
+          double end_path_d = j[1]["end_path_d"];
 
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
           // Wrap around cars s coordinate around max_s
           car_s = fmod(car_s, max_s);
-          /*
-          // update information of other cars
-          for (auto car: sensor_fusion) {
-            // idx: 0,  1, 2, 3,  4,  5, 6
-            //      id, x, y, vx, vy, s, d
-            int lane = getLane(car[6]);
-            
-            cout << "car_nr: " << car[0] << ", x=" << car[1] << ", y=" << car[2] 
-                 << ", s=" << car[5] << ", d=" << car[6] << ", lane=" << lane << endl; 
-            
-            if (other_vehicles.find(car[0]) != other_vehicles.end()) {
-              other_vehicles[car[0]].updateState(lane, car[5], sqrt((double)car[3]*(double)car[3]+(double)car[4]*(double)car[4]), 0., "KL");
-            } else {
-              other_vehicles.insert(make_pair(car[0], Vehicle(lane, car[5], sqrt((double)car[3]*(double)car[3]+(double)car[4]*(double)car[4]), 0., "KL")));
-            }
-          }
-          */
+
           cout << "--------------------------------------------------------------------------------" << endl;
           cout << "own_x=" << car_x << ", own_y=" << car_y << ", own_yaw=" << car_yaw << ", own_speed=" << car_speed
                << ", own_s=" << car_s << ", own_d=" << car_d << ", lane=" << getLane(car_d) << endl;
 
-          const int use_previous_path = 0;
-          const double time_horizon = 2.0; // seconds
-          const double dt = 0.02; // seconds          
-          const double target_speed_mph = 48.0; // miles per hour
-          const double target_speed_ms = target_speed_mph * 1.6 / 3.6; // meters per second
-          const double dist_inc = target_speed_ms * dt;
-          int waypoint_cnt = time_horizon / dt;
 
-          double pos_x, pos_y, pos_s, pos_d, angle;
-          int lane_num = 2;
           vector<double> next_x_vals;
           vector<double> next_y_vals;
           int previous_path_size = previous_path_x.size();
 
-          // there is no path yet, let's gently accelerate the car until we reach the target velocity	
-          if(previous_path_size == 0) {
-              pos_x = car_x;
-              pos_y = car_y;
-              pos_s = car_s;
-              pos_d = car_d;
-              angle = deg2rad(car_yaw);
-              trajectory_lanechange({pos_s, car_speed, 0.1},   {pos_d, 0.1, 0.1},
-                                    {pos_s + 40.0, target_speed_ms, 0.0},  3.5,
-                                    lane_num, map_interp, next_x_vals, next_y_vals);
-              end_path_s = pos_s + 40.0;
-              end_path_d = getLaneOffsetD(lane_num);
-              
-          } else {
-              // add remaining waypoints from previous list into the new list
-          		for (int i = 0; i < previous_path_size; i++) {
-            		next_x_vals.push_back(previous_path_x[i]);
-            		next_y_vals.push_back(previous_path_y[i]);
-          		}
+          // add remaining waypoints from previous list into the new list
+          // only start adding new waypoints if we can add more to the list
+       		for (int i = 0; i < previous_path_size; i++) {
+         		next_x_vals.push_back(previous_path_x[i]);
+         		next_y_vals.push_back(previous_path_y[i]);
+       		}
 
-              // only start adding new waypoints if we can add more to the list
-              if (previous_path_size < 20) {
-  	              pos_x = previous_path_x[previous_path_size-1]; 
-		              pos_y = previous_path_y[previous_path_size-1]; 
-		              double pos_x2 = previous_path_x[previous_path_size-2]; 
-		              double pos_y2 = previous_path_y[previous_path_size-2];
-		              double end_speed = distance(pos_x, pos_y, pos_x2, pos_y2) / 0.02;
-		              angle = atan2(pos_y-pos_y2, pos_x-pos_x2);
-		              auto last = map_interp.getFrenet(pos_x, pos_y, angle);
-		              pos_s = end_path_s;
-		              pos_d = end_path_d;
-                  trajectory_lanechange({pos_s,  end_speed, 0.0}, {pos_d, 0.0, 0.0},
-                                        {pos_s + target_speed_ms*time_horizon, target_speed_ms, 0.0},  time_horizon,
-                                        lane_num, map_interp, next_x_vals, next_y_vals);
-                  end_path_s = pos_s + target_speed_ms*time_horizon;
-              		end_path_d = getLaneOffsetD(lane_num);
-              } 
-          }
+          // there is no path yet, let's gently accelerate the car until we reach the target velocity	
+          if(car_starting) {
+         		 car_starting = false;
+             trajectory_lanechange({car_s, mph2mps(car_speed), 0.1},   {car_d, 0.1, 0.1},
+                                   {car_s + 40.0, target_speed_mps, 0.0},  3.5,
+                                   getLane(car_d), map_interp, next_x_vals, next_y_vals);
+
+          } else if (previous_path_size < 10) {
+		          // update information of other cars
+		        	map<int ,vector<Vehicle> > other_vehicles_predictions;
+		          for (auto car: sensor_fusion) {
+			            // idx: 0,  1, 2, 3,  4,  5, 6
+			            //      id, x, y, vx, vy, s, d
+			            int lane = getLane(car[6]);
+			            /*
+			            cout << "car_nr: " << car[0] << ", x=" << car[1] << ", y=" << car[2] << ", v=" << mps2mph(norm(car[3], car[4]))
+			                 << ", s=" << car[5] << ", d=" << car[6] << ", lane=" << lane << endl; 
+			            */
+			            if (other_vehicles.find(car[0]) != other_vehicles.end()) {
+			              	other_vehicles[car[0]].updateState(lane, car[5], norm(car[3], car[4]), 0., "KL");
+			            } else {
+			              	other_vehicles[car[0]] = Vehicle(lane, car[5], norm(car[3], car[4]), 0., "KL");
+			            }
+			            vector<Vehicle> preds = other_vehicles[car[0]].generate_predictions();
+			        		other_vehicles_predictions[car[0]] = preds;
+		          }
+
+	          	// update state of own car
+       	  		ego_vehicle.updateState(getLane(end_path_d), end_path_s, mph2mps(car_speed), 0.);
+		      	  auto trajectory = ego_vehicle.choose_next_state(other_vehicles_predictions);
+		      	  ego_vehicle.realize_next_state(trajectory);
+		    	  	cout << "current trajectory: " << endl;
+		    	  	for (auto v: trajectory) {
+		    	  		cout << "  state=" << v.state << ", lane=" << v.lane << ", s=" << v.s << ", v=" << v.v << ", a=" << v.a << endl;
+		    	  	}
+
+							trajectory_lanechange({trajectory[0].s,  trajectory[0].v, trajectory[0].a},
+																		{getLaneOffsetD(trajectory[0].lane), 0.0,  0.0},
+								                    {trajectory[1].s,   trajectory[1].v,  trajectory[1].a}, 1.,
+							  	                  trajectory[0].lane, map_interp, next_x_vals, next_y_vals);
+           }
+
+
+          /*
           cout << "end_path_d: " << end_path_d << ", end_path_s: " << end_path_s << endl;
 					auto last = map_interp.getFrenet(pos_x, pos_y, angle);
           cout << "last_d:     " << last[1] << ", last_s: " << last[0] << endl;
@@ -188,8 +185,7 @@ int main() {
           cout << "previous_path_size: " << previous_path_size << endl;
           cout << "next wp idx: " << cur_wp_idx << ", x=" << map_interp.getWpX(cur_wp_idx)
                << ", y=" << map_interp.getWpY(cur_wp_idx) << endl;
-
-
+					*/
           json msgJson;
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;

@@ -34,36 +34,30 @@ public:
 	vector<Vehicle> 	generate_predictions(int horizon=2);
 
 	void 	setPriorities(double reachGoal, double efficiency);
-	void 	increment(int dt);
-	double 	position_at(int t);
+	double 	position_at(double t);
 	bool 	get_vehicle_behind(map<int, vector<Vehicle>> predictions,int lane, Vehicle & rVehicle);
 	bool 	get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane, Vehicle & rVehicle);
 	void 	realize_next_state(vector<Vehicle> trajectory);
 	void    updateState(int lane, double s, double v, double a, string state="KL");
-	void 	configure(int target_speed, int lanes_available, int goal_s, int goal_lane, int max_acceleration);
+	void 	configure(double target_speed, int lanes_available, double goal_s, int goal_lane, double max_acceleration);
 
 
 //private:
 
-	map<string, int> lane_direction = {{"PLCL", 1}, {"LCL", 1}, {"LCR", -1}, {"PLCR", -1}};
-
-	struct collider{
-		bool collision ; 	// is there a collision?
-		int  time; 			// time collision happens
-	};
-
+	map<string, int> lane_direction = {{"PLCL", -1}, {"LCL", -1}, {"LCR", 1}, {"PLCR", 1}};
 	int L = 1;
 	int preferred_buffer = 6; // impacts "keep lane" behavior.
 	int lane;
-	int s;
+	double s;
 	double v;
 	double yaw;
 	double a;
 	double target_speed;
 	int lanes_available;
 	double max_acceleration;
+
 	int goal_lane;
-	int goal_s;
+	double goal_s;
 	string state;
 
 	double REACH_GOAL = 6;

@@ -33,7 +33,6 @@ void Vehicle::updateState(int lane, double s, double v, double a, string state) 
     this->v = v;
     this->a = a;
     this->state = state;
-    max_acceleration = -1;
     REACH_GOAL = 6;
     EFFICIENCY = 1;
 }
@@ -63,7 +62,9 @@ vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> predictions
     vector<Vehicle> lowest_cost_trajectory = generate_trajectory(state, predictions);
 
     // iterate over all future states
+    cout << "possible future states: ";
     for (auto &future_state : possible_future_states) {
+        cout << future_state << ", ";
         // get trajectory into future state
         auto trajectory = generate_trajectory(future_state, predictions);
         if (trajectory.size() > 0) {
@@ -75,7 +76,7 @@ vector<Vehicle> Vehicle::choose_next_state(map<int, vector<Vehicle>> predictions
             }
         }
     }
-
+    cout << endl;
     return lowest_cost_trajectory;
 }
 
@@ -88,18 +89,20 @@ vector<string> Vehicle::successor_states() {
     vector<string> states;
     states.push_back("KL");
     string state = this->state;
-    if(state.compare("KL") == 0) {
+    if(state == "KL") {
         states.push_back("PLCL");
         states.push_back("PLCR");
-    } else if (state.compare("PLCL") == 0) {
+    } else if (state == "PLCL") {
+        // we can change to the right lane if it's not already the (right-most) lane
         if (lane != lanes_available - 1) {
-            states.push_back("PLCL");
-            states.push_back("LCL");
-        }
-    } else if (state.compare("PLCR") == 0) {
-        if (lane != 0) {
             states.push_back("PLCR");
             states.push_back("LCR");
+        }
+    } else if (state == "PLCR") {
+        // we can only got left if we're not already on the first lane
+        if (lane != 0) {
+            states.push_back("PLCL");
+            states.push_back("LCL");
         }
     }
     //If state is "LCL" or "LCR", then just return "KL"
@@ -111,13 +114,13 @@ vector<Vehicle> Vehicle::generate_trajectory(string state, map<int, vector<Vehic
     Given a possible next state, generate the appropriate trajectory to realize the next state.
     */
     vector<Vehicle> trajectory;
-    if (state.compare("CS") == 0) {
+    if (state == "CS") {
         trajectory = constant_speed_trajectory();
-    } else if (state.compare("KL") == 0) {
+    } else if (state == "KL") {
         trajectory = keep_lane_trajectory(predictions);
-    } else if (state.compare("LCL") == 0 || state.compare("LCR") == 0) {
+    } else if (state == "LCL" || state == "LCR") {
         trajectory = lane_change_trajectory(state, predictions);
-    } else if (state.compare("PLCL") == 0 || state.compare("PLCR") == 0) {
+    } else if (state == "PLCL" || state == "PLCR") {
         trajectory = prep_lane_change_trajectory(state, predictions);
     }
     return trajectory;
@@ -146,8 +149,13 @@ vector<double> Vehicle::get_kinematics(map<int, vector<Vehicle>> predictions, in
     } else {
         new_velocity = min(max_velocity_accel_limit, this->target_speed);
     }
-    
-    new_accel = new_velocity - this->v; //Equation: (v_1 - v_0)/t = acceleration
+
+    double accel_tmp = new_velocity - this->v;  //Equation: (v_1 - v_0)/t = acceleration
+    if (accel_tmp < 0)
+        new_accel = max(accel_tmp, -this->max_acceleration);
+    else
+        new_accel = min(accel_tmp, this->max_acceleration);
+
     new_position = this->s + new_velocity + new_accel / 2.0;
     return {new_position, new_velocity, new_accel};
 }
@@ -222,8 +230,12 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Ve
     //Check if a lane change is possible (check if another vehicle occupies that spot).
     for (map<int, vector<Vehicle>>::iterator it = predictions.begin(); it != predictions.end(); ++it) {
         next_lane_vehicle = it->second[0];
-        if (next_lane_vehicle.s == this->s && next_lane_vehicle.lane == new_lane) {
+        if (next_lane_vehicle.lane == new_lane &&
+            this->s  >= next_lane_vehicle.s - 2.  && 
+            this->s  <= next_lane_vehicle.s + 2.)
+        {
             //If lane change is not possible, return empty trajectory.
+            cout << "no lane change possible!" << endl;
             return trajectory;
         }
     }
@@ -233,11 +245,8 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Ve
     return trajectory;
 }
 
-void Vehicle::increment(int dt = 1) {
-    this->s = position_at(dt);
-}
 
-double Vehicle::position_at(int dt) {
+double Vehicle::position_at(double dt) {
     return this->s + this->v*dt + this->a*dt*dt/2.0;
 }
 
@@ -302,6 +311,7 @@ void Vehicle::realize_next_state(vector<Vehicle> trajectory) {
     Sets state and kinematics for ego vehicle using the last state of the trajectory.
     */
     Vehicle next_state = trajectory[1];
+    cout << "set next state: " << next_state.state  << " and lane: " << next_state.lane << endl;
     this->state = next_state.state;
     this->lane = next_state.lane;
     this->s = next_state.s;
@@ -309,8 +319,9 @@ void Vehicle::realize_next_state(vector<Vehicle> trajectory) {
     this->a = next_state.a;
 }
 
-void Vehicle::configure(int target_speed, int lanes_available, int goal_s,
-                        int goal_lane, int max_acceleration) {
+void Vehicle::configure(double target_speed, int lanes_available,
+                        double goal_s, int goal_lane, double max_acceleration)
+{
     /*
     Called before simulation begins. Sets various
     parameters which will impact the ego vehicle. 
@@ -433,9 +444,9 @@ map<string, double> get_helper_data(const Vehicle & vehicle, const vector<Vehicl
     double intended_lane;
 
     if (trajectory_last.state == "PLCL") {
-        intended_lane = trajectory_last.lane + 1;
-    } else if (trajectory_last.state == "PLCR") {
         intended_lane = trajectory_last.lane - 1;
+    } else if (trajectory_last.state == "PLCR") {
+        intended_lane = trajectory_last.lane + 1;
     } else {
         intended_lane = trajectory_last.lane;
     }
