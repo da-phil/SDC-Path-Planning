@@ -5,6 +5,7 @@
 #include <sstream>
 
 #include "spline.h"
+#include "tools.hpp"
 
 #include "trackmap.hpp"
 
@@ -73,6 +74,37 @@ void trackmap::getXYMapAtSD(const vector<double> &s_list, const vector<double> &
 		map_y_wp.push_back(y_interp(s_list[idx]) + d_list[idx]*dy_interp(s_list[idx]));
 	}
 }
+
+
+void trackmap::getXYMapAtSD(const vector<double> &s_list, const vector<double> &d_list,
+                      		path_t &path, const int reuse_wp_cnt) const
+{
+	assert(s_list.size() == d_list.size());
+	double x, y, v, prev_x, prev_y, jmt_x, jmt_y, prev_jmt_x, prev_jmt_y;
+	prev_x = path.x.back();
+	prev_y = path.y.back();
+	//cout << "path = np.array([";
+	for (int idx = 1; idx < s_list.size(); idx++) {
+		jmt_x = x_interp(s_list[idx]) + d_list[idx]*dx_interp(s_list[idx]);
+		jmt_y = y_interp(s_list[idx]) + d_list[idx]*dy_interp(s_list[idx]);
+		prev_jmt_x = x_interp(s_list[idx-1]) + d_list[idx]*dx_interp(s_list[idx-1]);
+		prev_jmt_y = y_interp(s_list[idx-1]) + d_list[idx]*dy_interp(s_list[idx-1]);
+		x = prev_x + jmt_x - prev_jmt_x;
+		y = prev_y + jmt_y - prev_jmt_y;
+		v = distance(x, y, prev_x, prev_y) / 0.02;
+		path.s.push_back(s_list[idx]);
+		path.d.push_back(d_list[idx]);
+		path.x.push_back(jmt_x);
+		path.y.push_back(jmt_y);
+		path.v.push_back(v);
+		prev_x = x;
+		prev_y = y;
+		//cout << "deltaX: " << x - prev_x << ", deltaY: " << y - prev_y << ", v: " << v << endl;
+		//cout << "[" << x << ", " << y << "], " << endl;
+	}
+	//cout << "])" << endl;
+}
+
 
 double trackmap::getWpX(int idx) const
 {
@@ -203,3 +235,4 @@ vector<double> trackmap::getXY(double s, double d) const
 
 	return {x, y};
 }
+

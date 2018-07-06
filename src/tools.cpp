@@ -27,117 +27,132 @@ double norm(double x, double y) {
 }
 
 double mph2mps(double mph) {
-	return mph * 1.6 / 3.6; 
+	return mph / 2.2369362920544; 
 }
 
 double mps2mph(double mps) {
-	return mps * 3.6 / 1.6; 
-}
-
-int getLane(const double d, const double laneWidth) {
-	for (int lane = 0; lane <= 2; lane++) {
-		if (d > laneWidth*lane && d <= laneWidth*(lane+1)) {
-			return lane;
-		}
-	}
-	cout << "couldn't find lane for d=" << d << endl;
-	return 0;
-}
-
-double getLaneOffsetD(const int lane_number, const double laneWidth) {
-	return (laneWidth*lane_number) + 2.0;
+	return mps * 2.2369362920544; 
 }
 
 
 // Evaluate a polynomial.
 vector<double> polyeval(vector<double> &coeffs, vector<double> &x)
 {
-	vector<double> result(x.size());
-	for (int j = 0; j < x.size(); j++)
-	{
-		result[j] = 0;
-		for (int i = 0; i < coeffs.size(); i++) {
-			result[j] += coeffs[i] * pow(x[j], i);
-		}
-	}
-	return result;
+    vector<double> result(x.size());
+    for (int j = 0; j < x.size(); j++)
+    {
+        result[j] = 0;
+        for (int i = 0; i < coeffs.size(); i++) {
+            result[j] += coeffs[i] * pow(x[j], i);
+        }
+    }
+    return result;
 }
+
 
 double polyeval(vector<double> &coeffs, double x)
 {
-	double result = 0;
-	for (int i = 0; i < coeffs.size(); i++) {
-		result += coeffs[i] * pow(x, i);
-	}
-	return result;
+    double result = 0;
+    for (int i = 0; i < coeffs.size(); i++) {
+        result += coeffs[i] * pow(x, i);
+    }
+    return result;
 }
+
 
 double polyeval(Eigen::VectorXd &coeffs, double x)
 {
-	double result = 0.0;
-	for (int i = 0; i < coeffs.size(); i++) {
-		result += coeffs[i] * pow(x, i);
-	}
-	return result;
+    double result = 0.0;
+    for (int i = 0; i < coeffs.size(); i++) {
+        result += coeffs[i] * pow(x, i);
+    }
+    return result;
 }
+
+
+vector<double> polyfit(vector<double> &xvals, vector<double> &yvals, int order) {
+    assert(xvals.size() == yvals.size());
+    assert(order >= 1 && order <= xvals.size() - 1);
+    Eigen::VectorXd xvals_eig = Eigen::VectorXd::Map(xvals.data(), xvals.size());
+    Eigen::VectorXd yvals_eig = Eigen::VectorXd::Map(yvals.data(), yvals.size());
+	Eigen::VectorXd result_eig = polyfit(xvals_eig, yvals_eig, order);
+	vector<double> result(result_eig.data(), result_eig.data() + result_eig.size());
+    return result;
+}
+
 
 // Fit a polynomial.
 // Adapted from
 // https://github.com/JuliaMath/Polynomials.jl/blob/master/src/Polynomials.jl#L676-L716
-Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals, int order) {
-	assert(xvals.size() == yvals.size());
-	assert(order >= 1 && order <= xvals.size() - 1);
-	Eigen::MatrixXd A(xvals.size(), order + 1);
+Eigen::VectorXd polyfit(Eigen::VectorXd &xvals, Eigen::VectorXd &yvals, int order) {
+    assert(xvals.size() == yvals.size());
+    assert(order >= 1 && order <= xvals.size() - 1);
+    Eigen::MatrixXd A(xvals.size(), order + 1);
 
-	for (int i = 0; i < xvals.size(); i++) {
-		A(i, 0) = 1.0;
-	}
+    for (int i = 0; i < xvals.size(); i++) {
+        A(i, 0) = 1.0;
+    }
 
-	for (int j = 0; j < xvals.size(); j++) {
-		for (int i = 0; i < order; i++) {
-			A(j, i + 1) = A(j, i) * xvals(j);
-		}
-	}
+    for (int j = 0; j < xvals.size(); j++) {
+        for (int i = 0; i < order; i++) {
+            A(j, i + 1) = A(j, i) * xvals(j);
+        }
+    }
 
-	auto Q = A.householderQr();
-	auto result = Q.solve(yvals);
-	return result;
+    auto Q = A.householderQr();
+    auto result = Q.solve(yvals);
+    return result;
 }
 
+
 vector<double> polyfit_wp(int wp_start, int wp_stop, int order,
-						  vector<double> &map_x, vector<double> &map_y)
+                          vector<double> &map_x, vector<double> &map_y)
 {
-	assert(map_x.size() == map_y.size());
-	int wp_count = wp_stop - wp_start;
-	Eigen::VectorXd xvals_eig(wp_count);
-	Eigen::VectorXd yvals_eig(wp_count);
-	Eigen::MatrixXd A(wp_count, order+1);
-	// make sure indicies for map_x and map_y wrap around map size!
-	wp_start = wp_start % map_x.size();
-	wp_stop  = wp_stop  % map_x.size();
+    assert(map_x.size() == map_y.size());
+    int wp_count = wp_stop - wp_start;
+    Eigen::VectorXd xvals_eig(wp_count);
+    Eigen::VectorXd yvals_eig(wp_count);
+    Eigen::MatrixXd A(wp_count, order+1);
+    // make sure indicies for map_x and map_y wrap around map size!
+    wp_start = wp_start % map_x.size();
+    wp_stop  = wp_stop  % map_x.size();
 
-	for (int idx = 0; idx < wp_count; idx++) {
-		xvals_eig(idx) = map_x[wp_start+idx];
-		yvals_eig(idx) = map_y[wp_start+idx];
-	}
+    for (int idx = 0; idx < wp_count; idx++) {
+        xvals_eig(idx) = map_x[wp_start+idx];
+        yvals_eig(idx) = map_y[wp_start+idx];
+    }
 
-	for (int i = 0; i < wp_count; i++) {
-		A(i, 0) = 1.0;
-	}
+    for (int i = 0; i < wp_count; i++) {
+        A(i, 0) = 1.0;
+    }
 
-	for (int j = 0; j < wp_count; j++) {
-		for (int i = 0; i < order; i++) {
-			A(j, i + 1) = A(j, i) * xvals_eig(j);
-		}
-	}
-	/*
-	IOFormat CleanFmt(4, 0, ", ", "\n", "[", "]");
-	cout << "A: " << endl << A.format(CleanFmt) << endl;
-	*/
-	auto Q = A.householderQr();
-	VectorXd result_eig = Q.solve(yvals_eig);
-	vector<double> result(result_eig.data(), result_eig.data() + result_eig.size());
-	return result;
+    for (int j = 0; j < wp_count; j++) {
+        for (int i = 0; i < order; i++) {
+            A(j, i + 1) = A(j, i) * xvals_eig(j);
+        }
+    }
+    /*
+    IOFormat CleanFmt(4, 0, ", ", "\n", "[", "]");
+    cout << "A: " << endl << A.format(CleanFmt) << endl;
+    */
+    auto Q = A.householderQr();
+    VectorXd result_eig = Q.solve(yvals_eig);
+    vector<double> result(result_eig.data(), result_eig.data() + result_eig.size());
+    return result;
+}
+
+int getLane(const double d, const double laneWidth) {
+    for (int lane = 0; lane <= 2; lane++) {
+        if (d > laneWidth*lane && d <= laneWidth*(lane+1)) {
+            return lane;
+        }
+    }
+    cout << "couldn't find lane for d=" << d << endl;
+    return 0;
+}
+
+double getLaneOffsetD(const int lane_number, const double laneWidth) {
+    return (laneWidth*lane_number) + 2.0;
 }
 
 
@@ -185,6 +200,3 @@ vector<double> JMT(vector< double> start, vector <double> end, double T)
     return {start[0], start[1], 0.5*start[2],
             b(0),     b(1),     b(2)};
 }
-
-
-

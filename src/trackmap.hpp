@@ -4,9 +4,55 @@
 #include <iostream>
 #include <vector>
 #include "spline.h"
+#include "tools.hpp"
 
 using namespace std;
 
+
+
+typedef	struct {
+	vector<double> x;
+	vector<double> y;	
+	vector<double> s;
+	vector<double> d;
+	vector<double> v;
+
+	// interpolate y in respect to x
+	void smoothXY() {
+		
+		vector<double> range(s.size());
+		for (int i = 0; i < s.size(); i++)
+			range[i] += i;
+
+		auto coeffs = polyfit(range, s, 5);
+		s = polyeval(coeffs, range);
+		coeffs = polyfit(s, x, 5);
+		x = polyeval(coeffs, s);
+		coeffs = polyfit(s, y, 5);
+		y = polyeval(coeffs, s);
+		/*
+		auto coeffs = polyfit(x, y, 5);
+		y.clear();
+		y = polyeval(coeffs, x);
+		*/
+		/*
+		cout << "path2 = np.array([";
+		for (int i = 0; i < x.size(); i++)
+		{
+			cout << "[" << x[i] << ", " << y[i] << "]," << endl;
+		}
+		cout << "])" << endl;
+		*/
+	}
+	void clear() {
+		x.clear();
+		y.clear();
+		s.clear();
+		d.clear();
+		v.clear();
+	}
+
+} path_t;
 
 
 class trackmap {
@@ -15,10 +61,10 @@ public:
 			 const vector<double> &map_dx_wp, const vector<double> &map_dy_wp, const vector<double> &map_s_wp);
 	trackmap(const string map_file_);
 
-	//void add_wp(vector<double> map_x, vector<double> map_y) const;
-
 	void getXYMapAtSD(const vector<double> &s_list, const vector<double> &d_list,
 					  vector<double> &map_x_wp, vector<double> &map_y_wp) const;
+	void getXYMapAtSD(const vector<double> &s_list, const vector<double> &d_list,
+                      path_t &path, const int reuse_wp_cnt) const;
 	double getWpX(int idx) const;
 	double getWpY(int idx) const;
 	int ClosestWaypoint(double x, double y) const;
