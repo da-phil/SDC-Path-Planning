@@ -83,8 +83,24 @@ void trackmap::getXYMapAtSD(const vector<double> &s_list, const vector<double> &
 	double x, y, v, prev_x, prev_y, jmt_x, jmt_y, prev_jmt_x, prev_jmt_y;
 	prev_x = path.x.back();
 	prev_y = path.y.back();
+
+
+	for (int idx = 0; idx < s_list.size(); idx++) {
+		//cout << "adding new wp!" << endl;
+		x = x_interp(s_list[idx]) + d_list[idx]*dx_interp(s_list[idx]);
+		y = y_interp(s_list[idx]) + d_list[idx]*dy_interp(s_list[idx]);
+		path.x.push_back(x);
+		path.y.push_back(y);
+		path.s.push_back(s_list[idx]);
+		path.d.push_back(d_list[idx]);
+		path.v.push_back(distance(x, y, prev_x, prev_y) / 0.02);
+		prev_x = x;
+		prev_y = y;
+	}
+	/*	
 	//cout << "path = np.array([";
 	for (int idx = 1; idx < s_list.size(); idx++) {
+
 		jmt_x = x_interp(s_list[idx]) + d_list[idx]*dx_interp(s_list[idx]);
 		jmt_y = y_interp(s_list[idx]) + d_list[idx]*dy_interp(s_list[idx]);
 		prev_jmt_x = x_interp(s_list[idx-1]) + d_list[idx]*dx_interp(s_list[idx-1]);
@@ -102,6 +118,7 @@ void trackmap::getXYMapAtSD(const vector<double> &s_list, const vector<double> &
 		//cout << "deltaX: " << x - prev_x << ", deltaY: " << y - prev_y << ", v: " << v << endl;
 		//cout << "[" << x << ", " << y << "], " << endl;
 	}
+	*/
 	//cout << "])" << endl;
 }
 

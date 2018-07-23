@@ -18,7 +18,6 @@ set(sources
 	src/tools.cpp
 	src/trackmap.cpp
 	src/trajectory_generation.cpp
-	src/trajectory_classification.cpp
 )
 
 

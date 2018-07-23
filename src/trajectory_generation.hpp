@@ -48,13 +48,14 @@ public:
 
 	map<string, int> lane_direction = {{"PLCL", -1}, {"LCL", -1}, {"LCR", 1}, {"PLCR", 1}};
 	int L = 1;
-	int preferred_buffer = 10; // impacts "keep lane" behavior.
+	int preferred_buffer = 15.; // impacts "keep lane" behavior.
 	int lane;
 	double s;
 	double v;
 	double yaw;
 	double a;
 	double target_speed;
+	double target_lane;
 	int lanes_available;
 	double max_acceleration;
 
@@ -62,6 +63,7 @@ public:
 	double goal_s;
 	string state;
 
+	double maneuver_duration = 1.8;
 	double REACH_GOAL_COST;
 	double EFFICIENCY_COST;
 	double VELOCITY_COST;

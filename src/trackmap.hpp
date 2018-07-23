@@ -19,22 +19,18 @@ typedef	struct {
 
 	// interpolate y in respect to x
 	void smoothXY() {
-		
+		// first smooth s, then x and y with respect to s
 		vector<double> range(s.size());
 		for (int i = 0; i < s.size(); i++)
 			range[i] += i;
-
-		auto coeffs = polyfit(range, s, 5);
-		s = polyeval(coeffs, range);
-		coeffs = polyfit(s, x, 5);
+		auto coeffs = polyfit(s, x, 5);
 		x = polyeval(coeffs, s);
 		coeffs = polyfit(s, y, 5);
 		y = polyeval(coeffs, s);
-		/*
-		auto coeffs = polyfit(x, y, 5);
-		y.clear();
+		// and then smooth again y with respect to x
+		coeffs = polyfit(x, y, 5);
 		y = polyeval(coeffs, x);
-		*/
+
 		/*
 		cout << "path2 = np.array([";
 		for (int i = 0; i < x.size(); i++)
@@ -52,6 +48,32 @@ typedef	struct {
 		v.clear();
 	}
 
+	void removeFirstPoints(int numPoints) {
+		if (x.size() < numPoints)
+			return;
+		
+		x.erase(x.begin(), x.begin() + numPoints);
+		y.erase(y.begin(), y.begin() + numPoints);
+		s.erase(s.begin(), s.begin() + numPoints);
+		d.erase(d.begin(), d.begin() + numPoints);
+		v.erase(v.begin(), v.begin() + numPoints);
+	}
+
+	void removeLastPoints(int numPoints) {
+		if (x.size() < numPoints)
+			return;
+
+		x.erase(x.end() - numPoints, x.end());
+		y.erase(y.end() - numPoints, y.end());
+		s.erase(s.end() - numPoints, s.end());
+		d.erase(d.end() - numPoints, d.end());
+		v.erase(v.end() - numPoints, v.end());
+	}
+
+	int size(void) const {
+		return x.size();
+	}
+	
 } path_t;
 
 

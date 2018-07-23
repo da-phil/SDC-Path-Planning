@@ -153,21 +153,22 @@ vector<double> Vehicle::get_kinematics(map<int, vector<Vehicle>> predictions, in
         if (get_vehicle_behind(predictions, lane, vehicle_behind)) {
             new_velocity = vehicle_ahead.v; //must travel at the speed of traffic, regardless of preferred buffer
         } else {
-            double max_velocity_in_front = (vehicle_ahead.s - this->s - this->preferred_buffer) / time_horizon +
-                                            vehicle_ahead.v - 0.5*this->a*time_horizon*time_horizon;
-            cout << "velocity_in_front: " << vehicle_ahead.v << ", max_velocity_in_front: " << max_velocity_in_front << endl;
-            new_velocity = min(min(max_velocity_in_front, max_velocity_accel_limit), this->target_speed);
+            double max_velocity_in_front = (vehicle_ahead.s - s - preferred_buffer) / time_horizon +
+                                            vehicle_ahead.v - a*time_horizon;
+            cout << "velocity_in_front: " << mps2mph(vehicle_ahead.v) << ", max_velocity_in_front: "
+                 << mps2mph(max_velocity_in_front) << endl;
+            new_velocity = min(min(max_velocity_in_front, max_velocity_accel_limit), target_speed);
         }
 
     } else {
-        new_velocity = min(max_velocity_accel_limit, this->target_speed);
+        new_velocity = min(max_velocity_accel_limit, target_speed);
     }
 
-    double accel_tmp = (new_velocity - this->v) / time_horizon;  //Equation: (v_1 - v_0)/t = acceleration
+    double accel_tmp = (new_velocity - v) / time_horizon;  //Equation: (v_1 - v_0)/t = acceleration
     if (accel_tmp < 0.0)
-        new_accel = max(accel_tmp, -this->max_acceleration);
+        new_accel = max(accel_tmp, -max_acceleration);
     else
-        new_accel = min(accel_tmp, this->max_acceleration);
+        new_accel = min(accel_tmp, max_acceleration);
 
     new_position = this->s + new_velocity*time_horizon +
                     0.5*new_accel*time_horizon*time_horizon;
@@ -179,7 +180,7 @@ vector<Vehicle> Vehicle::constant_speed_trajectory() {
     /*
     Generate a constant speed trajectory.
     */
-    double next_pos = position_at(1.5);
+    double next_pos = position_at(maneuver_duration);
     vector<Vehicle> trajectory = {Vehicle(this->lane, this->s, this->v, this->a, this->state), 
                                   Vehicle(this->lane, next_pos, this->v, 0, this->state)};
     return trajectory;
@@ -189,12 +190,12 @@ vector<Vehicle> Vehicle::keep_lane_trajectory(map<int, vector<Vehicle>> predicti
     /*
     Generate a keep lane trajectory.
     */
-    vector<Vehicle> trajectory = {Vehicle(lane, this->s, this->v, this->a, state)};
-    vector<double> kinematics = get_kinematics(predictions, this->lane, 1.5);
+    vector<Vehicle> trajectory = {Vehicle(lane, s, v, a, state)};
+    vector<double> kinematics = get_kinematics(predictions, target_lane, maneuver_duration);
     double new_s = kinematics[0];
     double new_v = kinematics[1];
     double new_a = kinematics[2];
-    trajectory.push_back(Vehicle(this->lane, new_s, new_v, new_a, "KL"));
+    trajectory.push_back(Vehicle(target_lane, new_s, new_v, new_a, "KL"));
     return trajectory;
 }
 
@@ -206,19 +207,18 @@ vector<Vehicle> Vehicle::prep_lane_change_trajectory(string state, map<int, vect
     double new_v;
     double new_a;
     Vehicle vehicle_behind;
-    int new_lane = this->lane + lane_direction[state];
-    vector<Vehicle> trajectory = {Vehicle(this->lane, this->s, this->v, this->a, this->state)};
-    vector<double> curr_lane_new_kinematics = get_kinematics(predictions, this->lane, 1.5);
+    int new_lane = target_lane;
+    vector<Vehicle> trajectory = {*this};
+    vector<double> curr_lane_new_kinematics = get_kinematics(predictions, this->lane, maneuver_duration);
 
     if (get_vehicle_behind(predictions, this->lane, vehicle_behind)) {
         //Keep speed of current lane so as not to collide with car behind.
         new_s = curr_lane_new_kinematics[0];
         new_v = curr_lane_new_kinematics[1];
         new_a = curr_lane_new_kinematics[2];
-        
     } else {
         vector<double> best_kinematics;
-        vector<double> next_lane_new_kinematics = get_kinematics(predictions, new_lane, 1.5);
+        vector<double> next_lane_new_kinematics = get_kinematics(predictions, new_lane, maneuver_duration);
         //Choose kinematics with lowest velocity.
         if (next_lane_new_kinematics[1] < curr_lane_new_kinematics[1]) {
             best_kinematics = next_lane_new_kinematics;
@@ -239,24 +239,23 @@ vector<Vehicle> Vehicle::lane_change_trajectory(string state, map<int, vector<Ve
     Generate a lane change trajectory.
     */
     int new_lane = this->lane + lane_direction[state];
-    goal_lane = new_lane;
     vector<Vehicle> trajectory;
     Vehicle next_lane_vehicle;
     //Check if a lane change is possible (check if another vehicle occupies that spot).
     for (map<int, vector<Vehicle>>::iterator it = predictions.begin(); it != predictions.end(); ++it) {
         next_lane_vehicle = it->second[0];
-        //cout << "checking vehicle id " << it->first << " in lane " << next_lane_vehicle.lane << " with s=" << next_lane_vehicle.s << endl;
         if (next_lane_vehicle.lane == new_lane &&
             this->s  >= next_lane_vehicle.s - 8.  && 
             this->s  <= next_lane_vehicle.s + 8.)
         {
             //If lane change is not possible, return empty trajectory.
-            cout << "no lane change possible!" << endl;
+            cout << "no lane change possible! car " << it->first << " in lane " << next_lane_vehicle.lane << " is in the way!" << endl;
             return trajectory;
         }
     }
-    trajectory.push_back(Vehicle(this->lane, this->s, this->v, this->a, this->state));
-    vector<double> kinematics = get_kinematics(predictions, new_lane, 1.5);
+    target_lane = new_lane;
+    trajectory.push_back(Vehicle(lane, s, v, a, state));
+    vector<double> kinematics = get_kinematics(predictions, new_lane, maneuver_duration);
     trajectory.push_back(Vehicle(new_lane, kinematics[0], kinematics[1], kinematics[2], state));
     return trajectory;
 }
@@ -298,7 +297,7 @@ bool Vehicle::get_vehicle_ahead(map<int, vector<Vehicle>> predictions, int lane,
         Vehicle temp_vehicle = it.second[0];
         // check whether vehicle is in the same lane as us, is in front of us and 
         // if it's within 2s reach (2*v)
-        if (temp_vehicle.lane == this->lane && temp_vehicle.s > this->s && temp_vehicle.s < min_s &&
+        if (temp_vehicle.lane == this->lane && temp_vehicle.s >= this->s && temp_vehicle.s < min_s &&
             (temp_vehicle.s - this->s) < 2.0*this->v)
         {
             min_s = temp_vehicle.s;
@@ -394,20 +393,14 @@ double goal_distance_cost(const Vehicle & vehicle, const vector<Vehicle> & traje
     double cost;
     double distance = data["distance_to_goal"];
     if (distance > 0) {
-        cost = 1. - 2.0*exp(-(abs(2.0*vehicle.goal_lane - data["intended_lane"] - data["final_lane"]) / distance));
+        cost = 1. - exp(-(abs(2.0*vehicle.goal_lane - data["intended_lane"] - data["final_lane"]) / distance));
     } else {
         cost = 1.;
     }
+    cout << "goal_distance_cost: " << cost << endl;    
     return cost;
 }
 
-
-/*
-Here we have provided two possible suggestions for cost functions, but feel free to use your own!
-The weighted cost over all cost functions is computed in calculate_cost. The data from get_helper_data
-will be very useful in your implementation of the cost functions below. Please see get_helper_data
-for details on how the helper data is computed. 
-*/
 double velocity_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory, const map<int, vector<Vehicle>> & predictions, map<string, double> & data) {
     /*
     Cost increases based on distance of intended lane (for planning a lane change) and final lane of trajectory.
@@ -418,12 +411,12 @@ double velocity_cost(const Vehicle & vehicle, const vector<Vehicle> & trajectory
     Vehicle car_ahead;
     bool found_car = findClosestCar(vehicle, predictions, car_ahead);
     if (found_car) {
-        cost = 1.0 - vehicle.target_speed / (vehicle.target_speed - car_ahead.v);
+        cost = abs(vehicle.target_speed - car_ahead.v) / vehicle.target_speed;
     } else
     {
-        cost = 1.0;
+        cost = 0.0;
     }
-
+    cout << "velocity_cost: " << cost << endl;
     return cost;
 }
 
@@ -448,7 +441,8 @@ double inefficiency_cost(const Vehicle & vehicle, const vector<Vehicle> & trajec
         proposed_speed_final = vehicle.target_speed;
     }
     
-    double cost = (2.0*vehicle.target_speed - proposed_speed_intended - proposed_speed_final) / vehicle.target_speed;
+    double cost = abs(2.0*vehicle.target_speed - proposed_speed_intended - proposed_speed_final) / vehicle.target_speed;
+    cout << "inefficiency_cost: " << cost << endl;    
     return cost;
 }
 
@@ -504,8 +498,9 @@ double calculate_cost(const Vehicle & vehicle, const map<int, vector<Vehicle>> &
     double cost = 0.0;
 
     //Add additional cost functions here.
-    vector< function<double(const Vehicle & , const vector<Vehicle> &, const map<int, vector<Vehicle>> &,
-                            map<string, double> &)>> cf_list = {goal_distance_cost, inefficiency_cost, velocity_cost};
+    vector< function<double(const Vehicle & , const vector<Vehicle> &,
+                            const map<int, vector<Vehicle>> &, map<string, double> &)>>
+                            cf_list = {goal_distance_cost, inefficiency_cost, velocity_cost};
     vector<double> weight_list = {REACH_GOAL, EFFICIENCY, VELOCITY};
     
     for (int i = 0; i < cf_list.size(); i++) {
@@ -513,7 +508,7 @@ double calculate_cost(const Vehicle & vehicle, const map<int, vector<Vehicle>> &
         cost += new_cost;
     }
 
-    return abs(cost);
+    return cost;
 
 }
 
@@ -560,15 +555,8 @@ void getWaypointsFromTrajectory(const vector<Vehicle> &trajectory, const double 
     auto d_params = JMT({getLaneOffsetD(trajectory[0].lane), 0.0, 0.0},
                         {getLaneOffsetD(trajectory[1].lane), 0.0, 0.0}, timehorizon);
     int waypoint_cnt = timehorizon / dt;
-    // only keep wp in the range [0, reuse_wp_cnt-1], delete all remaining waypoints
-    /*
-    if (path.x.size() > reuse_wp_cnt) {
-        path.x.erase(path.x.end() - reuse_wp_cnt, path.x.end());
-        path.y.erase(path.y.end() - reuse_wp_cnt, path.y.end());
-        path.s.erase(path.s.end() - reuse_wp_cnt, path.s.end());
-        path.d.erase(path.d.end() - reuse_wp_cnt, path.d.end());
-    }
-    */
+    // only keep wp in the range [0, reuse_wp_cnt-1], delete all remaining waypoints (already in main.c!)
+
     //cout << "sending " << waypoint_cnt << " waypoints!" << endl;
 
     vector<double> s_list(waypoint_cnt);

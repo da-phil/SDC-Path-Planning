@@ -56,7 +56,7 @@ int main() {
 	path_t path;
 
   // setPriorities(double reachGoal, double efficiency, double velocity);
-  ego_vehicle.setPriorities(6.0, 1.0, 100.); 
+  ego_vehicle.setPriorities(6.0, 10.0, 100.); 
 
   h.onMessage([&other_vehicles, &ego_vehicle, &map_interp, &car_starting,
   						 &target_speed_mph, &target_speed_mps, &path]
@@ -104,32 +104,23 @@ int main() {
           double pos_x2;
           double pos_y2;
           double angle;
-          int reuse_wp_cnt = 30;
+          int window_wps = 150; // 2.s / 0.02s = 100
+          int delta_t = window_wps * 0.02;
+          int reuse_wp_cnt = 50; // 0.4s / 0.02s = 20
           // Wrap around cars s coordinate around max_s
           car_s = fmod(car_s, max_s);
       		
-      		if (car_speed < 1e-6 && path.x.size() < 5) {
+      		if (car_speed < 1e-6 &&
+      			 (path.x.size() < 5 || previous_path_x.size() == 0)) {
        			car_starting = true;
        		}
        		
        		//cout << "previous_path_size: " << previous_path_size << ", path_size:          " << path_size << endl;
 
-          // add remaining waypoints from previous list into the new list
-          // only start adding new waypoints if we can add more to the list
-          /*
-       		for (int i = 0; i < previous_path_size; i++) {
-         		next_x_vals.push_back(previous_path_x[i]);
-         		next_y_vals.push_back(previous_path_y[i]);
-       		}
-       		*/
        		// remove already used waypoints from path
-       		unsigned diff = abs(path_size - previous_path_size);
-       		if (diff >= 1) {
-	       		path.x.erase(path.x.begin(), path.x.begin() + diff);
-	       		path.y.erase(path.y.begin(), path.y.begin() + diff);
-	       		path.s.erase(path.s.begin(), path.s.begin() + diff);
-	       		path.d.erase(path.d.begin(), path.d.begin() + diff);
-	       		path.v.erase(path.v.begin(), path.v.begin() + diff);
+       		unsigned diff = path_size - previous_path_size;
+       		if (diff > 0) {
+						path.removeFirstPoints(diff);
      			}
 
           cout << "----------------------------------------------------------------------------------------------------------" << endl;
@@ -152,17 +143,18 @@ int main() {
          		 car_starting = false;
          		 cout << "starting the car!" << endl;
 
-						 getWaypointsFromTrajectory({Vehicle(getLane(car_d), car_s, mph2mps(car_speed), 0.5),
-             														 Vehicle(getLane(car_d), car_s + 1.7*target_speed_mps, target_speed_mps, 0.0)},
-             														 3.5, map_interp, path, reuse_wp_cnt);
-          } else if (path_size < 15) {
+						 getWaypointsFromTrajectory({Vehicle(getLane(car_d), car_s, mph2mps(car_speed), 0.0),
+             														 Vehicle(getLane(car_d), car_s + delta_t*target_speed_mps, target_speed_mps, 0.0)},
+             														 2*delta_t, map_interp, path, 1);
+          } else if (previous_path_size < (window_wps - reuse_wp_cnt)) {
 		          pos_x = path.x.back();
 		          pos_y = path.y.back();
 		          pos_x2 = path.x[path.x.size()-2];
 		          pos_y2 = path.y[path.x.size()-2];
 		          angle = atan2(pos_y-pos_y2,pos_x-pos_x2);
 
-
+							path.removeLastPoints(path.size() - reuse_wp_cnt);
+							cout << path.size() << " path elements left!" << endl;
 		          // update information of other cars
 		        	map<int ,vector<Vehicle> > other_vehicles_predictions;
 		          for (auto car: sensor_fusion) {
@@ -178,21 +170,24 @@ int main() {
 			            } else {
 			              	other_vehicles[car[0]] = Vehicle(lane, car[5], norm(car[3], car[4]), 0., "CS");
 			            }
-			            vector<Vehicle> preds = other_vehicles[car[0]].generate_predictions(3.0);
+			            vector<Vehicle> preds = other_vehicles[car[0]].generate_predictions(2*delta_t);
 			        		other_vehicles_predictions[car[0]] = preds;
 		          }
 
 	          	// update state of own car
-	          	int reuse_wp_cnt_tmp = path.x.size() - 1;
-	          	cout << "upadating car with d=" << path.d[reuse_wp_cnt_tmp] << ", s=" << path.s[reuse_wp_cnt_tmp] << ", v=" << mps2mph(path.v[reuse_wp_cnt_tmp]) << endl;
-       	  		ego_vehicle.updateState(getLane(path.d[reuse_wp_cnt_tmp]), path.s[reuse_wp_cnt_tmp], path.v[reuse_wp_cnt_tmp], 0.);
+	          	cout << "updating car with d=" << path.d.back() << ", s=" << path.s.back() << ", v=" << mps2mph(path.v.back()) << endl;
+       	  		ego_vehicle.updateState(getLane(path.d.back()), path.s.back(), path.v.back(), 0.);
+       	  		/*
+		      	  cout << "updating car with d=" << car_d << ", s=" << car_s << ", v=" << car_speed << endl;
+       	  		ego_vehicle.updateState(getLane(car_d), car_s, mph2mps(car_speed), 0.);
+		      	  */
 		      	  auto trajectory = ego_vehicle.choose_next_state(other_vehicles_predictions);
 		      	  ego_vehicle.realize_next_state(trajectory);
 		    	  	cout << "current trajectory: " << endl;
 		    	  	for (auto v: trajectory) {
 		    	  		cout << "  state=" << v.state << ", lane=" << v.lane << ", s=" << v.s << ", v=" << mps2mph(v.v) << ", a=" << v.a << endl;
 		    	  	}
-              getWaypointsFromTrajectory(trajectory, 1.5, map_interp, path, reuse_wp_cnt);
+              getWaypointsFromTrajectory(trajectory, delta_t, map_interp, path, reuse_wp_cnt);
            }
 
 
