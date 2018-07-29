@@ -72,36 +72,10 @@ public:
     }
 
     vector<double> operator[](int T) {
-        return getStateAt(T);
+        return getState_at(T);
     }
 
-    vector<double> getSat(int T) {
-        if (!_generated) {
-            cerr << "Generate trajectory first!" << endl;
-            return {};
-        }
-        if (T >= _traj.size()) {
-            cerr << "Query at T=" << T << " out of bounds!" << endl;
-            return {};
-        }
-
-        return _traj[T].get_s();
-    }
-
-    vector<double> getDat(int T) {
-        if (!_generated) {
-            cerr << "Generate trajectory first!" << endl;
-            return {};
-        }
-        if (T >= _traj.size()) {
-            cerr << "Query at T=" << T << " out of bounds!" << endl;
-            return {};
-        }
-
-        return _traj[T].get_d();
-    }
-
-    vector<double> getStateAt(int T) {
+    vector<double> getState_at(int T) {
         if (!_generated) {
             cerr << "Generate trajectory first!" << endl;
             return {};
@@ -146,8 +120,6 @@ public:
             double d        = traj_coeffs.second.polyeval(t);
             double d_d      = traj_coeffs.second.polyeval_d(t);
             double d_dd     = traj_coeffs.second.polyeval_dd(t);
-            cout << "s: " << s << ", s_d: " << s_d << ", s_dd: " << s_dd  << " / "
-                 << "d: " << d << ", d_d: " << d_d << ", d_dd: " << d_dd << endl;
             _traj[t].set_frenet_state(s, s_d, s_dd, d, d_d, d_dd);
         }
         _generated = true;
@@ -232,12 +204,12 @@ private:
     
     std::default_random_engine _rand_generator;
     std::map<std::string, double> _cost_weights = {
-        {"tr_buf_cost",     140.0},
-        {"eff_cost",        110.0},
-        {"acc_s_cost",      10.0},
-        {"acc_d_cost",      10.0},
-        {"jerk_cost",       10.0},
-        {"lane_dep_cost",   0.05},
+        {"tr_buf_cost",     120.0},
+        {"eff_cost",        100.0},
+        {"acc_s_cost",      20.0},
+        {"acc_d_cost",      20.0},
+        {"jerk_cost",       20.0},
+        {"lane_dep_cost",   0.5},
         {"traffic_cost",    10.0}
     };
 };

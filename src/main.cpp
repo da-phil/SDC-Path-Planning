@@ -36,23 +36,7 @@ string hasData(string s) {
 }
 
 
-
-
-// converts world space s coordinate to local space based on provided mapping
-double get_local_s(double world_s, vector<double> const &waypoints_segment_s_worldSpace, vector<double> const &waypoints_segment_s) {
-  int prev_wp = 0;
-  // special case: first wp in list is larger than s. Meaning we are crossing over 0 somewhere.
-  // go to index with value zero first and search from there.
-  if (waypoints_segment_s_worldSpace[0] > world_s) {
-      while (waypoints_segment_s_worldSpace[prev_wp] != 0.0)
-          prev_wp += 1;
-  }
-  while ((waypoints_segment_s_worldSpace[prev_wp+1] < world_s) && (waypoints_segment_s_worldSpace[prev_wp+1] != 0))
-      prev_wp += 1;
-  double diff_world = world_s - waypoints_segment_s_worldSpace[prev_wp];
-  return waypoints_segment_s[prev_wp] + diff_world;
-}
-            
+       
 int main() {
   uWS::Hub h;
     
@@ -131,11 +115,11 @@ int main() {
           // plan a new path
           if (prev_path_size < (horizon - update_interval))
           {
-            vector<double> waypoints_segment_s, waypoints_segment_s_worldSpace;
-            map.fit_spline_segment(car_s, waypoints_segment_s, waypoints_segment_s_worldSpace);
+            // fit position spline for track around 10 previous and 20 next waypoints
+            map.fit_spline_segment(car_s);
 
             // convert current s of ego and other vehicles into local frenet space
-            double car_local_s = get_local_s(car_s, waypoints_segment_s_worldSpace, waypoints_segment_s);
+            double car_local_s = map.get_local_s(car_s);
 
             // turn each vehicle in the sensor fusion data into Vehicle objects
             // TODO: don't use vector, use map instead, with car ID as key!
@@ -144,7 +128,7 @@ int main() {
               // car idx: 0,  1, 2, 3,  4,  5, 6
               //          id, x, y, vx, vy, s, d
               Vehicle vehicle((int) car[0]);
-              double local_s = get_local_s(car[5], waypoints_segment_s_worldSpace, waypoints_segment_s);
+              double local_s = map.get_local_s(car[5]);
               vehicle.set_frenet_pos(local_s, car[6]);
               double velocity_per_timestep = norm(car[3], car[4]) * dt;
               vehicle.set_frenet_motion(velocity_per_timestep, 0.0, 0.0, 0.0);
@@ -171,9 +155,9 @@ int main() {
               update_interval = horizon - 80;
             }
             
+            // get only path in S and D frenet coordinates
             auto newPath = trajectory.getSD();
             map.getSmoothPath(prevPath, newPath, next_x_vals, next_y_vals, reuse_prev_range);
-            //map.getXYMapAtSD(sd_path[0], sd_path[1], next_x_vals, next_y_vals);
 
           } else {
             // only copy remaining path back to new path

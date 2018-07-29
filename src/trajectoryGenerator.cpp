@@ -320,8 +320,9 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     start_s = {car_s, car_speed,  0.0};
     start_d = {car_d, 0.0,        0.0};
   } else {
-    start_s = _trajectory.getSat(lag+update_interval);
-    start_d = _trajectory.getDat(lag+update_interval);
+    auto last_sample = _trajectory[lag+update_interval];
+    start_s = {car_s, last_sample[1], last_sample[2]};
+    start_d = {car_d, last_sample[4], last_sample[5]};
   }
   cout << "start: ";
   for (int i = 0; i < 3; i++)
@@ -335,11 +336,11 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
   //cout << "delta_s_test = " << delta_s_test << endl;
   // calculating weighted average speed between v_0 and v_max
   _max_dist_per_timestep = (1*mph2mps(max_speed)*_dt + 2*start_s[1]) / 3.;
-  cout << "_max_dist_per_timestep: "  << _max_dist_per_timestep << endl;
+  //cout << "_max_dist_per_timestep: "  << _max_dist_per_timestep << endl;
   _delta_s_maxspeed = _max_dist_per_timestep * horizon;
-  cout << "_delta_s_maxspeed: "  << _delta_s_maxspeed << endl;  
+  //cout << "_delta_s_maxspeed: "  << _delta_s_maxspeed << endl;  
   int cur_lane = convert_d_to_lane(start_d[0]);
-  cout << "ego local s: " << start_s[0] << " s_vel: " << start_s[1] << " d: " << start_d[0] << endl;
+  cout << "local_s: " << start_s[0] << " s_vel: " << start_s[1] << " d: " << start_d[0] << endl;
 
   vector<double> goal_vec;
   vector<vector<double>> goal_points;

@@ -54,55 +54,79 @@ trackmap::trackmap(const string map_file_)
 
 
 
-void trackmap::fit_spline_segment(double car_s,
-                                  vector<double> &waypoints_segment_s,
-                                  vector<double> &waypoints_segment_s_worldSpace)
+void trackmap::fit_spline_segment(double car_s)
 {
-  // get 10 previous and 20 next waypoints
-  vector<double> waypoints_segment_x, waypoints_segment_y, waypoints_segment_dx, waypoints_segment_dy;
-  vector<int> wp_indeces;
-  const int lower_wp_i = 9;
-  const int upper_wp_i = 20;
-  int prev_wp = -1;
-  while(car_s > map_s_wp[prev_wp+1] && (prev_wp < (int) (map_s_wp.size()-1) ))
-          prev_wp++;
-  for (int i = lower_wp_i; i > 0; i--) {
-    if (prev_wp - i < 0)
-      wp_indeces.push_back(map_s_wp.size() + (prev_wp - i));
-    else
-      wp_indeces.push_back((prev_wp - i) % map_s_wp.size());
-  }
-  wp_indeces.push_back(prev_wp);
-  for (int i = 1; i < upper_wp_i; i++)
-    wp_indeces.push_back((prev_wp + i) % map_s_wp.size());
+    // get 10 previous and 20 next waypoints
+    vector<double> waypoints_segment_x, waypoints_segment_y, waypoints_segment_dx, waypoints_segment_dy;
+    vector<int> wp_indices;
+    const int lower_wp_i = 9;
+    const int upper_wp_i = 20;
+    int prev_wp = -1;
 
-  // FILL NEW SEGMENT WAYPOINTS
-  const double max_s = 6945.554;
-  bool crossed_through_zero = false;
-  double seg_start_s = map_s_wp[wp_indeces[0]];
-  for (int i = 0; i < wp_indeces.size(); i++) {
-    int cur_wp_i = wp_indeces[i];
-    waypoints_segment_x.push_back(map_x_wp[cur_wp_i]);
-    waypoints_segment_y.push_back(map_y_wp[cur_wp_i]);
-    waypoints_segment_dx.push_back(map_dx_wp[cur_wp_i]);
-    waypoints_segment_dy.push_back(map_dy_wp[cur_wp_i]);
-    // need special treatment of segments that cross over the end/beginning of lap
-    if (i > 0) {
-      if (cur_wp_i < wp_indeces[i-1])
-        crossed_through_zero = true;
+    waypoints_segment_s.clear();
+    waypoints_segment_s_worldSpace.clear();
+
+    while(car_s > map_s_wp[prev_wp+1] && (prev_wp < (int) (map_s_wp.size()-1) )) {
+        prev_wp++;
     }
-    waypoints_segment_s_worldSpace.push_back(map_s_wp[cur_wp_i]);
-    if (crossed_through_zero)
-      waypoints_segment_s.push_back(abs(seg_start_s - max_s) + map_s_wp[cur_wp_i]);
-    else
-      waypoints_segment_s.push_back(map_s_wp[cur_wp_i] - seg_start_s);
-  }
-  // fit splines
-  x_interp.set_points(waypoints_segment_s, waypoints_segment_x);
-  y_interp.set_points(waypoints_segment_s, waypoints_segment_y);
-  dx_interp.set_points(waypoints_segment_s, waypoints_segment_dx);
-  dy_interp.set_points(waypoints_segment_s, waypoints_segment_dy);
+    for (int i = lower_wp_i; i > 0; i--) {
+        if (prev_wp - i < 0)
+          wp_indices.push_back(map_s_wp.size() + (prev_wp - i));
+        else
+          wp_indices.push_back((prev_wp - i) % map_s_wp.size());
+    }
+    wp_indices.push_back(prev_wp);
+    for (int i = 1; i < upper_wp_i; i++) {
+        wp_indices.push_back((prev_wp + i) % map_s_wp.size());
+    }
+
+    // FILL NEW SEGMENT WAYPOINTS
+    const double max_s = 6945.554;
+    bool crossed_through_zero = false;
+    double seg_start_s = map_s_wp[wp_indices[0]];
+    for (int i = 0; i < wp_indices.size(); i++) {
+        int cur_wp_i = wp_indices[i];
+        waypoints_segment_x.push_back(map_x_wp[cur_wp_i]);
+        waypoints_segment_y.push_back(map_y_wp[cur_wp_i]);
+        waypoints_segment_dx.push_back(map_dx_wp[cur_wp_i]);
+        waypoints_segment_dy.push_back(map_dy_wp[cur_wp_i]);
+        // need special treatment of segments that cross over the end/beginning of lap
+        if (i > 0) {
+            if (cur_wp_i < wp_indices[i-1])
+                crossed_through_zero = true;
+        }
+        waypoints_segment_s_worldSpace.push_back(map_s_wp[cur_wp_i]);
+        if (crossed_through_zero) {
+            waypoints_segment_s.push_back(abs(seg_start_s - max_s) + map_s_wp[cur_wp_i]);
+        } else {
+            waypoints_segment_s.push_back(map_s_wp[cur_wp_i] - seg_start_s);
+        }
+    }
+    // fit splines
+    x_interp.set_points(waypoints_segment_s, waypoints_segment_x);
+    y_interp.set_points(waypoints_segment_s, waypoints_segment_y);
+    dx_interp.set_points(waypoints_segment_s, waypoints_segment_dx);
+    dy_interp.set_points(waypoints_segment_s, waypoints_segment_dy);
 }
+
+
+// converts world space s coordinate to local space based on provided mapping
+double trackmap::get_local_s(double world_s) {
+    int prev_wp = 0;
+    // special case: first wp in list is larger than s. Meaning we are crossing over 0 somewhere.
+    // go to index with value zero first and search from there.
+    if (waypoints_segment_s_worldSpace[0] > world_s) {
+        while (waypoints_segment_s_worldSpace[prev_wp] != 0.0)
+            prev_wp += 1;
+    }
+    while ((waypoints_segment_s_worldSpace[prev_wp+1] < world_s) &&
+           (waypoints_segment_s_worldSpace[prev_wp+1] != 0))  {
+        prev_wp += 1;
+    }
+    double diff_world = world_s - waypoints_segment_s_worldSpace[prev_wp];
+    return waypoints_segment_s[prev_wp] + diff_world;
+}
+     
 
 
 // Transform from Frenet s,d coordinates to Cartesian x,y
@@ -129,9 +153,9 @@ vector<double> trackmap::getXY(double s, double d) const
 
 // Transform from Frenet s,d coordinates to Cartesian x,y
 vector<double> trackmap::getXY_splines(double s, double d) {
-  double x = x_interp(s) + dx_interp(s) * d;
-  double y = y_interp(s) + dy_interp(s) * d;
-  return {x, y};
+    double x = x_interp(s) + dx_interp(s) * d;
+    double y = y_interp(s) + dy_interp(s) * d;
+    return {x, y};
 }
 
 // Transform from Frenet s,d coordinates to Cartesian x,y based on smooth cubic splines
@@ -148,56 +172,6 @@ void trackmap::getXYMapAtSD(const vector<double> &s_list, const vector<double> &
     }
 }
 
-/*
-// Transform from Frenet s,d coordinates to Cartesian x,y based on smooth cubic splines
-void trackmap::getXYMapAtSD(const vector<double> &s_list, const vector<double> &d_list,
-                            path_t &path, const int reuse_wp_cnt) const
-{
-    assert(s_list.size() == d_list.size());
-    double x, y, v, prev_x, prev_y, jmt_x, jmt_y, prev_jmt_x, prev_jmt_y;
-    prev_x = path.x.back();
-    prev_y = path.y.back();
-
-
-    for (int idx = 0; idx < s_list.size(); idx++) {
-        //cout << "adding new wp!" << endl;
-        x = x_interp(s_list[idx]) + d_list[idx]*dx_interp(s_list[idx]);
-        y = y_interp(s_list[idx]) + d_list[idx]*dy_interp(s_list[idx]);
-        path.x.push_back(x);
-        path.y.push_back(y);
-        path.s.push_back(s_list[idx]);
-        path.d.push_back(d_list[idx]);
-        path.v.push_back(distance(x, y, prev_x, prev_y) / 0.02);
-        prev_x = x;
-        prev_y = y;
-    }
-    */
-    /*  
-    //cout << "path = np.array([";
-    for (int idx = 1; idx < s_list.size(); idx++) {
-
-        jmt_x = x_interp(s_list[idx]) + d_list[idx]*dx_interp(s_list[idx]);
-        jmt_y = y_interp(s_list[idx]) + d_list[idx]*dy_interp(s_list[idx]);
-        prev_jmt_x = x_interp(s_list[idx-1]) + d_list[idx]*dx_interp(s_list[idx-1]);
-        prev_jmt_y = y_interp(s_list[idx-1]) + d_list[idx]*dy_interp(s_list[idx-1]);
-        x = prev_x + jmt_x - prev_jmt_x;
-        y = prev_y + jmt_y - prev_jmt_y;
-        v = distance(x, y, prev_x, prev_y) / 0.02;
-        path.s.push_back(s_list[idx]);
-        path.d.push_back(d_list[idx]);
-        path.x.push_back(jmt_x);
-        path.y.push_back(jmt_y);
-        path.v.push_back(v);
-        prev_x = x;
-        prev_y = y;
-        //cout << "deltaX: " << x - prev_x << ", deltaY: " << y - prev_y << ", v: " << v << endl;
-        //cout << "[" << x << ", " << y << "], " << endl;
-    }
-    */
-    /*
-    //cout << "])" << endl;
-}
-*/
 
 double trackmap::getWpX(int idx) const
 {

@@ -36,13 +36,10 @@ public:
 
     void getXYMapAtSD(const vector<double> &s_list, const vector<double> &d_list,
                       vector<double> &map_x_wp, vector<double> &map_y_wp) const;
-    /*
-    void getXYMapAtSD(const vector<double> &s_list, const vector<double> &d_list,
-                      path_t &path, const int reuse_wp_cnt) const;
-    */                    
-    void fit_spline_segment(double car_s,
-                            vector<double> &waypoints_segment_s,
-                            vector<double> &waypoints_segment_s_worldSpace);
+
+    double get_local_s(double world_s);    
+    void fit_spline_segment(double car_s);
+
     // Transform from Cartesian x,y coordinates to Frenet s,d coordinates
     vector<double> getFrenet(double x, double y, double theta) const;
     vector<double> getFrenetInterp(double x, double y, double theta) const;
@@ -59,6 +56,9 @@ public:
     tk::spline y_interp;
     tk::spline dx_interp;
     tk::spline dy_interp;
+
+    vector<double> waypoints_segment_s_worldSpace;
+    vector<double> waypoints_segment_s;
 
     // The max s value before wrapping around the track back to 0
     const double max_s = 6945.554;
