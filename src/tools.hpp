@@ -8,12 +8,13 @@
 using namespace Eigen;
 using namespace std;
 
-
+double pi();
 double deg2rad(double x);
 double rad2deg(double x);
 
 double distance(double x1, double y1, double x2, double y2);
 double norm(double x, double y);
+double norm(double x, double y, double z);
 double mph2mps(double mph);
 double mps2mph(double mps);
 

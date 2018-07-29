@@ -1,5 +1,5 @@
 #include <fstream>
-#include <math.h>
+#include <cmath>
 #include <uWS/uWS.h>
 #include <chrono>
 #include <iostream>
@@ -7,69 +7,83 @@
 #include <vector>
 
 #include "json.hpp"
-#include "tools.hpp"
-#include "trajectory_generation.hpp"
+#include "trajectoryGenerator.hpp"
 #include "trackmap.hpp"
+#include "tools.hpp"
+#include "vehicle.hpp"
+#include "spline.h"
+
 
 using namespace std;
 
 // for convenience
 using json = nlohmann::json;
 
-// The max s value before wrapping around the track back to 0
-const double max_s = 6945.554;
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
 string hasData(string s) {
-	  //cout << "str: " << s << endl;
-    auto found_null = s.find("null");
-    auto b1 = s.find_first_of("[");
-    auto b2 = s.find_first_of("}");
-    if (found_null != string::npos) {
-        return "";
-    } else if (b1 != string::npos && b2 != string::npos) {
-        return s.substr(b1, b2 - b1 + 2);
-    }
+  auto found_null = s.find("null");
+  auto b1 = s.find_first_of("[");
+  auto b2 = s.find_first_of("}");
+  if (found_null != string::npos) {
     return "";
+  } else if (b1 != string::npos && b2 != string::npos) {
+    return s.substr(b1, b2 - b1 + 2);
+  }
+  return "";
 }
 
 
+
+
+// converts world space s coordinate to local space based on provided mapping
+double get_local_s(double world_s, vector<double> const &waypoints_segment_s_worldSpace, vector<double> const &waypoints_segment_s) {
+  int prev_wp = 0;
+  // special case: first wp in list is larger than s. Meaning we are crossing over 0 somewhere.
+  // go to index with value zero first and search from there.
+  if (waypoints_segment_s_worldSpace[0] > world_s) {
+      while (waypoints_segment_s_worldSpace[prev_wp] != 0.0)
+          prev_wp += 1;
+  }
+  while ((waypoints_segment_s_worldSpace[prev_wp+1] < world_s) && (waypoints_segment_s_worldSpace[prev_wp+1] != 0))
+      prev_wp += 1;
+  double diff_world = world_s - waypoints_segment_s_worldSpace[prev_wp];
+  return waypoints_segment_s[prev_wp] + diff_world;
+}
+            
 int main() {
   uWS::Hub h;
+    
+  TrajectoryGenerator PTG;
 
-  // Waypoint map to read from, waypoints are interpolated with cubic splines
-  trackmap map_interp("../data/highway_map.csv");
-	double end_path_s, end_path_d;
-	double target_speed_mph = 47;
-	double target_speed_mps = mph2mps(target_speed_mph);
-  // Vehicle(int lane, double s, double v, double a, string state="CS")
-  Vehicle ego_vehicle;
-  // configure(int target_speed, int lanes_available, int goal_s, int goal_lane, int max_acceleration)
-  ego_vehicle.configure(target_speed_mps, 3, max_s+1.0, 2, 6.0);
-  ego_vehicle.state = "KL";
+  // Read waypoint map from csv file
+  trackmap map("../data/highway_map.csv");
 
-  map<int, Vehicle> other_vehicles;
+  // create object for ego vehicle;
+  Vehicle ego_veh;
+  
+  // #################################
+  // CONFIG
+  // #################################
+  int horizon_global = 170; //200
+  int horizon = horizon_global;
+  int update_interval_global = 50; // update every second
+  int update_interval = update_interval_global;
+  double speed_limit = 47.0;
+  
 
-  bool car_starting = true;
-	path_t path;
-
-  // setPriorities(double reachGoal, double efficiency, double velocity);
-  ego_vehicle.setPriorities(6.0, 10.0, 100.); 
-
-  h.onMessage([&other_vehicles, &ego_vehicle, &map_interp, &car_starting,
-  						 &target_speed_mph, &target_speed_mps, &path]
-              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length, uWS::OpCode opCode)
-  {
+  h.onMessage([&map, &PTG, &ego_veh, &horizon, &horizon_global, &update_interval_global, &update_interval, &speed_limit]
+              (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
     // The 4 signifies a websocket message
     // The 2 signifies a websocket event
     //auto sdata = string(data).substr(0, length);
-    //cout << sdata << endl;
-    if (length && length > 2 && data[0] == '4' && data[1] == '2')
-    {
-      auto s = hasData(string(data));
+    if (length && length > 2 && data[0] == '4' && data[1] == '2') {
+
+      auto s = hasData(data);
+
       if (s != "") {
         auto j = json::parse(s);
         
@@ -77,140 +91,110 @@ int main() {
         
         if (event == "telemetry") {
           // j[1] is the data JSON object
-          
-        	// Main car's localization Data
+
+          // Main car's localization Data
           double car_x = j[1]["x"];
           double car_y = j[1]["y"];
           double car_s = j[1]["s"];
           double car_d = j[1]["d"];
           double car_yaw = j[1]["yaw"];
           double car_speed = j[1]["speed"];
+
           // Previous path data given to the Planner
-          vector<double> previous_path_x = j[1]["previous_path_x"].get<std::vector<double>>();
-          vector<double> previous_path_y = j[1]["previous_path_y"].get<std::vector<double>>();
+          vector<double> previous_path_x = j[1]["previous_path_x"];
+          vector<double> previous_path_y = j[1]["previous_path_y"];
+
+          int prev_path_size = previous_path_x.size();          
+          vector<vector<double>> prevPath = {previous_path_x, previous_path_y};
+
           // Previous path's end s and d values 
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
-
+          
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
 
-          vector<double> next_x_vals;
-          vector<double> next_y_vals;
-          int previous_path_size = previous_path_x.size();
-          int path_size = path.x.size();
-          double pos_x;
-          double pos_y;
-          double pos_x2;
-          double pos_y2;
-          double angle;
-          int window_wps = 150; // 2.s / 0.02s = 100
-          int delta_t = window_wps * 0.02;
-          int reuse_wp_cnt = 50; // 0.4s / 0.02s = 20
-          // Wrap around cars s coordinate around max_s
-          car_s = fmod(car_s, max_s);
-      		
-      		if (car_speed < 1e-6 &&
-      			 (path.x.size() < 5 || previous_path_x.size() == 0)) {
-       			car_starting = true;
-       		}
-       		
-       		//cout << "previous_path_size: " << previous_path_size << ", path_size:          " << path_size << endl;
-
-       		// remove already used waypoints from path
-       		unsigned diff = path_size - previous_path_size;
-       		if (diff > 0) {
-						path.removeFirstPoints(diff);
-     			}
-
-          cout << "----------------------------------------------------------------------------------------------------------" << endl;
-          cout << "lag=" << diff << ", own_x=" << car_x << ", own_y=" << car_y << ", own_yaw=" << car_yaw << ", own_speed=" << car_speed
-               << ", own_s=" << car_s << ", own_d=" << car_d << ", lane=" << getLane(car_d) << endl;
-
-          // there is no path yet, let's gently accelerate the car until we reach the target velocity	
-          if(car_starting) {
-          	 path.clear();
-          	 path.x.push_back(car_x);
-	       		 path.y.push_back(car_y);
-	       		 path.s.push_back(car_s);
-	       		 path.d.push_back(car_d);
-	       		 path.v.push_back(mph2mps(car_speed));
-          	 pos_x = car_x;
-		         pos_y = car_y;
-		         pos_x2 = car_x;
-		         pos_y2 = car_y;
-		         angle = car_yaw;
-         		 car_starting = false;
-         		 cout << "starting the car!" << endl;
-
-						 getWaypointsFromTrajectory({Vehicle(getLane(car_d), car_s, mph2mps(car_speed), 0.0),
-             														 Vehicle(getLane(car_d), car_s + delta_t*target_speed_mps, target_speed_mps, 0.0)},
-             														 2*delta_t, map_interp, path, 1);
-          } else if (previous_path_size < (window_wps - reuse_wp_cnt)) {
-		          pos_x = path.x.back();
-		          pos_y = path.y.back();
-		          pos_x2 = path.x[path.x.size()-2];
-		          pos_y2 = path.y[path.x.size()-2];
-		          angle = atan2(pos_y-pos_y2,pos_x-pos_x2);
-
-							path.removeLastPoints(path.size() - reuse_wp_cnt);
-							cout << path.size() << " path elements left!" << endl;
-		          // update information of other cars
-		        	map<int ,vector<Vehicle> > other_vehicles_predictions;
-		          for (auto car: sensor_fusion) {
-			            // idx: 0,  1, 2, 3,  4,  5, 6
-			            //      id, x, y, vx, vy, s, d
-			            int lane = getLane(car[6]);
-			            /*
-			            cout << "car_nr: " << car[0] << ", x=" << car[1] << ", y=" << car[2] << ", v=" << mps2mph(norm(car[3], car[4]))
-			                 << ", s=" << car[5] << ", d=" << car[6] << ", lane=" << lane << endl; 
-			            */
-			            if (other_vehicles.find(car[0]) != other_vehicles.end()) {
-			              	other_vehicles[car[0]].updateState(lane, car[5], norm(car[3], car[4]), 0.);
-			            } else {
-			              	other_vehicles[car[0]] = Vehicle(lane, car[5], norm(car[3], car[4]), 0., "CS");
-			            }
-			            vector<Vehicle> preds = other_vehicles[car[0]].generate_predictions(2*delta_t);
-			        		other_vehicles_predictions[car[0]] = preds;
-		          }
-
-	          	// update state of own car
-	          	cout << "updating car with d=" << path.d.back() << ", s=" << path.s.back() << ", v=" << mps2mph(path.v.back()) << endl;
-       	  		ego_vehicle.updateState(getLane(path.d.back()), path.s.back(), path.v.back(), 0.);
-       	  		/*
-		      	  cout << "updating car with d=" << car_d << ", s=" << car_s << ", v=" << car_speed << endl;
-       	  		ego_vehicle.updateState(getLane(car_d), car_s, mph2mps(car_speed), 0.);
-		      	  */
-		      	  auto trajectory = ego_vehicle.choose_next_state(other_vehicles_predictions);
-		      	  ego_vehicle.realize_next_state(trajectory);
-		    	  	cout << "current trajectory: " << endl;
-		    	  	for (auto v: trajectory) {
-		    	  		cout << "  state=" << v.state << ", lane=" << v.lane << ", s=" << v.s << ", v=" << mps2mph(v.v) << ", a=" << v.a << endl;
-		    	  	}
-              getWaypointsFromTrajectory(trajectory, delta_t, map_interp, path, reuse_wp_cnt);
-           }
-
-
-          /*
-          cout << "end_path_d: " << end_path_d << ", end_path_s: " << end_path_s << endl;
-					auto last = map_interp.getFrenet(pos_x, pos_y, angle);
-          cout << "last_d:     " << last[1] << ", last_s: " << last[0] << endl;
- 					*/
           json msgJson;
-          msgJson["next_x"] = path.x;
-          msgJson["next_y"] = path.y;
-          auto msg = "42[\"control\","+ msgJson.dump()+"]";
+          
+          vector<double> next_x_vals;
+          vector<double> next_y_vals; 
 
-          //cout << "sending string: " << msg << endl;
-          //this_thread::sleep_for(chrono::milliseconds(1000));
+          const int reuse_prev_range = 5;
+          const double dt = 0.02; // seconds
+
+          // wrap around cars s coordinate around max_s
+          car_s = fmod(car_s, map.max_s);
+
+          // update actual position
+          ego_veh.set_frenet_pos(car_s, car_d);
+
+          // plan a new path
+          if (prev_path_size < (horizon - update_interval))
+          {
+            vector<double> waypoints_segment_s, waypoints_segment_s_worldSpace;
+            map.fit_spline_segment(car_s, waypoints_segment_s, waypoints_segment_s_worldSpace);
+
+            // convert current s of ego and other vehicles into local frenet space
+            double car_local_s = get_local_s(car_s, waypoints_segment_s_worldSpace, waypoints_segment_s);
+
+            // turn each vehicle in the sensor fusion data into Vehicle objects
+            // TODO: don't use vector, use map instead, with car ID as key!
+            vector<Vehicle> other_vehicles;
+            for (auto car: sensor_fusion) {
+              // car idx: 0,  1, 2, 3,  4,  5, 6
+              //          id, x, y, vx, vy, s, d
+              Vehicle vehicle((int) car[0]);
+              double local_s = get_local_s(car[5], waypoints_segment_s_worldSpace, waypoints_segment_s);
+              vehicle.set_frenet_pos(local_s, car[6]);
+              double velocity_per_timestep = norm(car[3], car[4]) * dt;
+              vehicle.set_frenet_motion(velocity_per_timestep, 0.0, 0.0, 0.0);
+              other_vehicles.push_back(vehicle);
+            }
+
+            int lag = horizon - update_interval - prev_path_size;
+            //cout << "prev_path_size: " << prev_path_size << endl;
+            cout << "lag: " << lag << endl;
+            if (lag > 10)
+              lag = 0; // sim start
+
+            vector<double> car_state = {car_local_s, car_d, mph2mps(car_speed)};
+            cout << "car state: s=" << car_s << ", car_d=" << car_d << ", speed=" << car_speed << endl;
+            auto trajectory = PTG.generate_trajectory(car_state, speed_limit, horizon, update_interval, lag, other_vehicles);
+            update_interval = update_interval_global;
+            horizon = horizon_global;
+            if (PTG.get_current_action() == "lane_change") {
+              cout << "LANE CHANGE" << endl;
+              update_interval = horizon - 50;
+            } else if (PTG.get_current_action() == "emergency") {
+              cout << "EMERGENCY" << endl;
+              horizon = 120;
+              update_interval = horizon - 80;
+            }
+            
+            auto newPath = trajectory.getSD();
+            map.getSmoothPath(prevPath, newPath, next_x_vals, next_y_vals, reuse_prev_range);
+            //map.getXYMapAtSD(sd_path[0], sd_path[1], next_x_vals, next_y_vals);
+
+          } else {
+            // only copy remaining path back to new path
+            for(int i = 0; i < previous_path_x.size(); i++) {
+              next_x_vals.push_back(previous_path_x[i]);
+              next_y_vals.push_back(previous_path_y[i]);
+            }
+          }
+
+          msgJson["next_x"] = next_x_vals;
+          msgJson["next_y"] = next_y_vals;
+          
+          std::string msg = "42[\"control\","+ msgJson.dump()+"]";
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
-
-        } else {
-            // Manual driving
-            std::string msg = "42[\"manual\",{}]";
-            ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
+      } else {
+        // Manual driving
+        std::string msg = "42[\"manual\",{}]";
+        ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
+      
     }
   });
 
