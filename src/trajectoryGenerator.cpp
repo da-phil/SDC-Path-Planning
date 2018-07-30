@@ -14,6 +14,7 @@ double TrajectoryGenerator::exceeds_speed_limit_cost(const pair<Polynomial, Poly
 {
   for (int i = 0; i < _horizon; i++) {
     if (traj.first.polyeval_d(i) + traj.second.polyeval_d(i) > _hard_max_vel_per_timestep) {
+      //cout << "exceeds_speed_limit_cost!" << endl;
       return 1.0;
     }
   }
@@ -26,6 +27,7 @@ double TrajectoryGenerator::exceeds_accel_cost(const pair<Polynomial, Polynomial
 {
   for (int i = 0; i < _horizon; i++) {
     if (traj.first.polyeval_dd(i) + traj.second.polyeval_dd(i) > _hard_max_acc_per_timestep) {
+      //cout << "exceeds_accel_cost!" << endl;
       return 1.0;
     }
   }
@@ -38,6 +40,7 @@ double TrajectoryGenerator::exceeds_jerk_cost(const pair<Polynomial, Polynomial>
 {
   for (int i = 0; i < _horizon; i++) {
     if (traj.first.polyeval_ddd(i) + traj.second.polyeval_ddd(i) > _hard_max_jerk_per_timestep) {
+      //cout << "exceeds_accel_cost!" << endl;
       return 1.0;
     }
   }
@@ -60,6 +63,7 @@ double TrajectoryGenerator::collision_cost(const pair<Polynomial, Polynomial> &t
       
       // make the envelope a little wider to stay "out of trouble"
       if ((diff_s <= _col_buf_length) && (diff_d <= _col_buf_width)) {
+        //cout << "trajectory contains collision! (s: " << ego_s << ", d: " << ego_d << ")" << endl;
         return 1.0;
       }
     }
@@ -77,11 +81,9 @@ double TrajectoryGenerator::traffic_buffer_cost(const pair<Polynomial, Polynomia
     for (int t = 0; t < _horizon; t++) {
       double ego_s = traj.first.polyeval(t);
       double ego_d = traj.second.polyeval(t);
-      vector<double> traffic_state = vehicles[i].state_at(t); // {s,d}
-      
+      vector<double> traffic_state = vehicles[i].state_at(t); 
       double diff_s = traffic_state[0] - ego_s;
-      // Ignore (potentially faster) vehicles from behind or that have fallen behind
-      // Tried it and ego moved out of their way, often hitting slower traffic. Not fun.
+      // ignore (potentially faster) vehicles from behind
       if (diff_s < -10) {
         break;
       }
@@ -169,7 +171,7 @@ double TrajectoryGenerator::traffic_ahead_cost(const pair<Polynomial, Polynomial
   double ego_s = traj.first.polyeval(0);
   double ego_d = traj.second.polyeval(0);
   double ego_d_end = traj.second.polyeval(_horizon);
-  int look_ahead = 200;
+  int look_ahead_s = 150;
 
   int future_lane = convert_d_to_lane(ego_d_end);
   int closest_veh_future_lane = closest_vehicle_in_lane({ego_s, ego_d_end}, future_lane, vehicles);
@@ -177,23 +179,23 @@ double TrajectoryGenerator::traffic_ahead_cost(const pair<Polynomial, Polynomial
   if (closest_veh_future_lane != -1) {
     vector<double> fut_traffic_s = vehicles[closest_veh_future_lane].get_s();
     float diff_s = fut_traffic_s[0] - ego_s;
-    if (diff_s < look_ahead) {
+    if (diff_s < look_ahead_s) {
       // don't switch into a lane with slower traffic ahead
       int cur_lane = convert_d_to_lane(ego_d);
       int closest_vehicle = closest_vehicle_in_lane({ego_s, ego_d_end}, cur_lane, vehicles);
       // if there is a vehicle in the current lane AND make range a bit tighter
-      if ((closest_vehicle != -1) && (diff_s < look_ahead / 2.0)) {
+      if ((closest_vehicle != -1) && (diff_s < look_ahead_s / 2.0)) {
         vector<double> traffic_s = vehicles[closest_vehicle].get_s();
         double ego_s_vel = traj.first.polyeval_d(0);
         // traffic in planned lane clearly slower than in current?
-        if (fut_traffic_s[1] < traffic_s[1] * 0.95) {
+        if (fut_traffic_s[1] < traffic_s[1] * 0.9) {
           return 1e3;
         }
       }
       // end - don't switch into a lane with slower traffic ahead
       
       // no slower traffic in goal lane, so return regular cost
-      return logistic(1 - (diff_s / look_ahead));
+      return logistic(1 - (diff_s / look_ahead_s));
     }
   }
   return 0.0;
@@ -346,7 +348,7 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
   vector<vector<double>> goal_points;
   vector<vector<double>> traj_goals;
   vector<double> traj_costs;
-
+  vector<string> traj_states;
   /////////////////////////////////////////////////////////////////
   // Find feasable next states from previous states:
   // - go straight
@@ -423,9 +425,10 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     double goal_d_vel = 0.0;
     double goal_d_acc = 0.0;
     goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
-    cout << "straight goal s: " << goal_s_pos << endl;
     goal_points.push_back(goal_vec);
     perturb_goal(goal_vec, goal_points);
+    for (int i = 0; i <= _goal_perturb_samples; i++)
+      traj_states.push_back("straight");
   }
   
   // FOLLOW OTHER VEHICLE
@@ -452,9 +455,11 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
     goal_points.push_back(goal_vec);
     perturb_goal(goal_vec, goal_points);
+    for (int i = 0; i <= _goal_perturb_samples; i++)
+      traj_states.push_back("follow_straight");    
   }
   
-  // CHANGE LANE LEFT
+  // change lane left
   if (change_left && (cur_lane != 0)) {
     double goal_s_pos = start_s[0] + _delta_s_maxspeed;
     double goal_s_vel = _max_dist_per_timestep;
@@ -473,10 +478,12 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     double goal_d_acc = 0.0;
     goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
     goal_points.push_back(goal_vec);
-    perturb_goal(goal_vec, goal_points, true);
+    perturb_goal(goal_vec, goal_points);
+    for (int i = 0; i <= _goal_perturb_samples; i++)
+      traj_states.push_back("left");      
   }
-  
-  // CHANGE LANE RIGHT
+
+  // change lane right
   if (change_right && (cur_lane != 2)) {
     double goal_s_pos = start_s[0] + _delta_s_maxspeed;
     double goal_s_vel = _max_dist_per_timestep;
@@ -496,23 +503,22 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     goal_vec = {goal_s_pos, goal_s_vel, goal_s_acc, goal_d_pos, goal_d_vel, goal_d_acc};
     goal_points.push_back(goal_vec);
     perturb_goal(goal_vec, goal_points);
+    for (int i = 0; i <= _goal_perturb_samples; i++)
+      traj_states.push_back("right");      
   }
 
- 
-  cout << "PLAN: ";
+  cout << "Possible next state(s): ";
   if (go_straight)
-    cout << " :GO STRAIGHT: ";
+    cout << " GO STRAIGHT ";
   if (go_straight_follow_lead)
-    cout << " :FOLLOW LEAD: ";
+    cout << " FOLLOW LEAD ";
   if (change_left)
-    cout << " :CHANGE LEFT: ";
+    cout << " CHANGE LEFT ";
   if (change_right)
-    cout << " :CHANGE RIGHT: ";
+    cout << " CHANGE RIGHT ";
   cout << endl;
   
-  /////////////////////////////////////////////////////////////////
-  // JERK MINIMIZED TRAJECTORIES
-  /////////////////////////////////////////////////////////////////
+  // Generate jerk minimal trajectories
   vector<pair<Polynomial, Polynomial>> traj_coeffs;
   for (vector<double> goal : goal_points) {
     vector<double> goal_s = {goal[0], goal[1], goal[2]};
@@ -523,12 +529,10 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
       Polynomial traj_d_poly = jmt(start_d, goal_d, _horizon);
       traj_coeffs.push_back(std::make_pair(traj_s_poly, traj_d_poly));
       traj_goals.push_back({goal[0], goal[1], goal[2], goal[3], goal[4], goal[5]});
-    }     
+    }
   }
   
-  /////////////////////////////////////////////////////////////////
-  // COMPUTE COST FOR EACH TRAJECTORY
-  /////////////////////////////////////////////////////////////////
+  // Calculate cost for each trajectory
   vector<vector<double>> all_costs;
   for (int i = 0; i < traj_coeffs.size(); i++) {
     double cost = calculate_cost(traj_coeffs[i], traj_goals[i], vehicles, all_costs);
@@ -552,7 +556,7 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     double min_s = traj_coeffs[0].first.polyeval(_horizon);
     int min_s_num = 0;
     // find trajectory going straight with minimum s
-    for (int i = 1; i < _goal_perturb_samples; i++) {
+    for (int i = 1; i <= _goal_perturb_samples; i++) {
       if (traj_coeffs[i].first.polyeval(_horizon) < min_s){
         min_s = traj_coeffs[i].first.polyeval(_horizon);
         min_s_num = i;
@@ -565,17 +569,34 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
   if (min_cost_traj_num > _goal_perturb_samples) {
     _current_action = "lane_change";  
   }
-  
-  cout << "cost[" << min_cost_traj_num << "]: " << traj_costs[min_cost_traj_num] << endl;
+  /*
+  for (int i = 0;  i < traj_states.size(); i++) {
+    cout << "cost[" << traj_states[i] << "]: " << traj_costs[i] << endl;
+    if (i < all_costs.size()) {
+      if (all_costs[i].size() >= 6) {
+        cout << "\ttraffic buffer cost: " << all_costs[i][0] << endl;
+        cout << "\tefficiency cost: " << all_costs[i][1] << endl;
+        cout << "\tacceleration s cost: " << all_costs[i][2] << endl;
+        cout << "\tacceleration d cost: " << all_costs[i][3] << endl;
+        cout << "\tjerk cost: " << all_costs[i][4] << endl;
+        cout << "\tlane depart cost: " << all_costs[i][5] << endl;
+        cout << "\ttraffic cost: " << all_costs[i][6] << endl;
+        cout << "\tlowest cost traj goal s/d: " << goal_points[i][0]
+             << " / " << goal_points[i][3] << endl;
+      }
+    }    
+  }
+  */
+  cout << "chosen maneuver:     " << traj_states[min_cost_traj_num] << "(s: "
+       << goal_points[min_cost_traj_num][0] << " / d: "
+       << goal_points[min_cost_traj_num][3] << ")"  << endl;
   cout << "traffic buffer cost: " << all_costs[min_cost_traj_num][0] << endl;
-  cout << "efficiency cost: " << all_costs[min_cost_traj_num][1] << endl;
+  cout << "efficiency cost:     " << all_costs[min_cost_traj_num][1] << endl;
   cout << "acceleration s cost: " << all_costs[min_cost_traj_num][2] << endl;
   cout << "acceleration d cost: " << all_costs[min_cost_traj_num][3] << endl;
-  cout << "jerk cost: " << all_costs[min_cost_traj_num][4] << endl;
-  cout << "lane depart cost: " << all_costs[min_cost_traj_num][5] << endl;
-  cout << "traffic cost: " << all_costs[min_cost_traj_num][6] << endl;
-  cout << "lowest cost traj goal s/d: " << goal_points[min_cost_traj_num][0]
-       << " / " << goal_points[min_cost_traj_num][3] << endl;
+  cout << "jerk cost:           " << all_costs[min_cost_traj_num][4] << endl;
+  cout << "lane depart cost:    " << all_costs[min_cost_traj_num][5] << endl;
+  cout << "traffic cost:        " << all_costs[min_cost_traj_num][6] << endl;
 
   // eventually generate trajectory
   _trajectory.generate(traj_coeffs[min_cost_traj_num], _horizon);

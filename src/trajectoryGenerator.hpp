@@ -186,31 +186,31 @@ private:
 
 
     Trajectory _trajectory;
-    int _horizon = 0;
-    std::string _current_action = "straight";
+    int _horizon                    = 0;
+    std::string _current_action     = "straight";
     const double _dt                = 0.02;
     const double _car_width         = 2.0;
     const double _car_length        = 5.0;
     const double _car_col_width     = 0.5 * _car_width;
     const double _car_col_length    = 0.5 * _car_length;
     const double _col_buf_width     = _car_width;
-    const double _col_buf_length    = 5 * _car_length;
+    const double _col_buf_length    = 4 * _car_length;
     const int _goal_perturb_samples = 10;
-    const double _hard_max_vel_per_timestep     = mph2mps(49.) * _dt; // 50 miles + a little buffer
-    const double _hard_max_acc_per_timestep     = 9.0 * _dt; // 9 m/s
-    const double _hard_max_jerk_per_timestep    = 8.0 * _dt; // 8 m/s^2
+    const double _hard_max_vel_per_timestep     = mph2mps(48.) * _dt; // 50 miles + a little buffer
+    const double _hard_max_acc_per_timestep     = 8.0 * _dt; // m/s
+    const double _hard_max_jerk_per_timestep    = 7.0 * _dt; // m/s^2
     double _max_dist_per_timestep               = 0.0;
     double _delta_s_maxspeed                    = 0.0;
     
     std::default_random_engine _rand_generator;
     std::map<std::string, double> _cost_weights = {
-        {"tr_buf_cost",     120.0},
+        {"tr_buf_cost",     200.0},
         {"eff_cost",        100.0},
         {"acc_s_cost",      20.0},
         {"acc_d_cost",      20.0},
         {"jerk_cost",       20.0},
         {"lane_dep_cost",   0.5},
-        {"traffic_cost",    10.0}
+        {"traffic_cost",    100.0}
     };
 };
 

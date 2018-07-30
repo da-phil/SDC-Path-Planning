@@ -51,9 +51,9 @@ int main() {
   // #################################
   // CONFIG
   // #################################
-  int horizon_global = 170; //200
+  int horizon_global = 160;
   int horizon = horizon_global;
-  int update_interval_global = 50; // update every second
+  int update_interval_global = 20; // update every second
   int update_interval = update_interval_global;
   double speed_limit = 47.0;
   
@@ -107,7 +107,7 @@ int main() {
           const double dt = 0.02; // seconds
 
           // wrap around cars s coordinate around max_s
-          car_s = fmod(car_s, map.max_s);
+          //car_s = fmod(car_s, map.max_s);
 
           // update actual position
           ego_veh.set_frenet_pos(car_s, car_d);
@@ -147,11 +147,11 @@ int main() {
             update_interval = update_interval_global;
             horizon = horizon_global;
             if (PTG.get_current_action() == "lane_change") {
-              cout << "LANE CHANGE" << endl;
+              cout << "Changing lane!" << endl;
               update_interval = horizon - 50;
             } else if (PTG.get_current_action() == "emergency") {
-              cout << "EMERGENCY" << endl;
-              horizon = 120;
+              cout << "Emergency!" << endl;
+              //horizon = 120;
               update_interval = horizon - 80;
             }
             
