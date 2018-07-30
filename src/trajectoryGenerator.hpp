@@ -194,7 +194,7 @@ private:
     const double _car_col_width     = 0.5 * _car_width;
     const double _car_col_length    = 0.5 * _car_length;
     const double _col_buf_width     = _car_width;
-    const double _col_buf_length    = 4 * _car_length;
+    const double _col_buf_length    = 5 * _car_length;
     const int _goal_perturb_samples = 10;
     const double _hard_max_vel_per_timestep     = mph2mps(48.) * _dt; // 50 miles + a little buffer
     const double _hard_max_acc_per_timestep     = 8.0 * _dt; // m/s

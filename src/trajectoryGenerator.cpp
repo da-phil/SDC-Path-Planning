@@ -326,13 +326,7 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     start_s = {car_s, last_sample[1], last_sample[2]};
     start_d = {car_d, last_sample[4], last_sample[5]};
   }
-  cout << "start: ";
-  for (int i = 0; i < 3; i++)
-    cout << start_s[i] << ", ";
-  cout << " / ";
-  for (int i = 0; i < 3; i++)
-    cout << start_d[i] << ", ";
-  cout << endl;
+
   _horizon = horizon;
   double delta_s_test = (pow(mph2mps(max_speed)*_dt, 2) - pow(start_s[1], 2)) / (2. * _hard_max_acc_per_timestep);
   //cout << "delta_s_test = " << delta_s_test << endl;
@@ -456,7 +450,11 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     goal_points.push_back(goal_vec);
     perturb_goal(goal_vec, goal_points);
     for (int i = 0; i <= _goal_perturb_samples; i++)
-      traj_states.push_back("follow_straight");    
+      if (_current_action == "emergency") {
+        traj_states.push_back("emergency");
+      } else {
+        traj_states.push_back("follow_straight");
+      }
   }
   
   // change lane left
@@ -587,7 +585,7 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     }    
   }
   */
-  cout << "chosen maneuver:     " << traj_states[min_cost_traj_num] << "(s: "
+  cout << "chosen maneuver:     " << traj_states[min_cost_traj_num] << " (s: "
        << goal_points[min_cost_traj_num][0] << " / d: "
        << goal_points[min_cost_traj_num][3] << ")"  << endl;
   cout << "traffic buffer cost: " << all_costs[min_cost_traj_num][0] << endl;
