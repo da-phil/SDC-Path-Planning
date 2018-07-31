@@ -38,7 +38,7 @@ Trajectory generator which implements the state machine and cost functions, it a
 
 ## Results
 Here is a video of approx. 1.5x cycles around the highway track:
-[imgs/video2.mkv](imgs/video2.mkv)
+[imgs/video2.mkv](imgs/video2.mp4)
 
 ## Running the code
 
