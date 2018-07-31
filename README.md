@@ -7,7 +7,19 @@ In this project the goal is to safely navigate safely around a virtual three lan
 
 ## Implementation
 ### State machine
-A finite statemachine with transitions based on cost-functions is used to find the most convenient and safe path according to the objective of repeatedly driving around the test track without causing traffic incidents. The way the car responds to certain situation can be configured by cost-function weights, e.g. the penalty for staying a slow lane or high accelerations or frequent lane changes.
+A finite state machine with transitions based on cost-functions is used to find the most convenient and safe path according to the objective of repeatedly driving around the test track without causing traffic incidents. The way the car responds to certain situation can be configured by cost-function weights, e.g. the penalty for staying a slow lane or high accelerations or frequent lane changes. Having multiple trajectory variations modelled into only one state and using cost-functions as transition condition is convenient because it keeps the state machine simple and clear and makes it easy to add more cost policies, without altering the structure of the state machine.
+
+The following states are used:
+* go straight
+* follow vehicle
+* lane change left
+* lane change right
+Based on the current situation possible transitions to future states are activated or deactivated.
+Trajectories for all possible future states are then generated with default values which get further perturbed to add potentially more cost-efficient variations.
+Eventually these trajectories are evaluated for feasibility (no collisions, does not exceed acceleration and jerk limit, etc). Non-feasible trajectories are marked with a very high cost, such that only feasible trajectories are compared against each other with the "cheapest" trajectory becoming the output of the path planner. All trajectories are weighted according to preferences reflected in the weights.
+It was difficult to find accurate start car states (especially velocities and accelerations) for generating feasible trajectories. Therefore a history of previously planned car states is kept in the trajectory object within the planner for consecutive planning steps.
+Because it’s convenient path planning was done in frenet coordinates which later get converted into world X/Y coordinates by the map object.
+
 
 ### Jerk minimal trajectories
 The resulting jerk minimal trajectories are modelled using quintic (5th order) polynomials. Using quintic polynomials for describing sequential displacements has the advantage that by differentiating the displacement polynomial the acceleration as well as jerk are smooth and therefore don't have discontinuities across a path. Boundary conditions (displacement, velocity, acceleration, time-duration) for the start and end of a path are defined, such that we end up with three equations for final displacement, velocity and acceleration and three unknowns, which is a straightforward problem to solve.
@@ -22,7 +34,15 @@ As a really helpful resource for fitting cubic splines I was using the [open-sou
 Kluge](http://kluge.in-chemnitz.de/opensource/spline), which comes in a single hearder file and is really easy to use.
 
 In this project all track waypoints are provided at once in a .csv File. It would be possible to use the entire world at once to fit a spline through all waypoints, but it is not possible nor practical in reality. Moreover, it would have required special treatment to ensure a smooth transition when the S coordinate of the track wraps around back to 0 when one lap was completed.
-Instead, a local area with the 30 closest waypoints to the car is used and splines for X, Y, dX and dY in respect to S are fitted, which also makes the conversion from frenet to cartesian space smooth and jerk-free.
+Instead, a local area with the 30 closest waypoints to the car is used and splines for X, Y, dX and dY in respect to S are fitted, which also makes the conversion from frenet to cartesian space smooth and jerk-minimal.
+
+### Dealing with lag
+Since the vehicle "teleports" around the track based on an exact X/Y coordinate, it is very susceptible to small discontinuities in the planned path, this gets amplified by lag between the simulator and path planner. On my PC the lag is between one and four cycles at the simulator sample rate of 0.02 seconds.
+
+To overcome discontinuities at each update interval the following steps are done:
+* reuse a defined amount of previous path elements for consecutive planning steps
+* for each successive point, deltas in X and Y between the planning steps of the new path are added on top of the previous X and Y value. This adds a neglibible error of no more than the distance the car travels in one timestep (0.02s).
+
 
 ## Code structure
 ### main.cpp
@@ -74,7 +94,7 @@ Here is a video of approx. 1.5x cycles around the highway track:
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).
 
 #### Simulator implementation details
-1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every .02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 50 m/s^3. (NOTE: As this is BETA, these requirements might change. Also currently jerk is over a .02 second interval, it would probably be better to average total acceleration over 1 second and measure jerk from that.
+1. The car uses a perfect controller and will visit every (x,y) point it recieves in the list every 0.02 seconds. The units for the (x,y) points are in meters and the spacing of the points determines the speed of the car. The vector going from a point to the next point in the list dictates the angle of the car. Acceleration both in the tangential and normal directions is measured along with the jerk, the rate of change of total Acceleration. The (x,y) point paths that the planner recieves should not have a total acceleration that goes over 10 m/s^2, also the jerk should not go over 10 m/s^3.
 
 2. There will be some latency between the simulator running and the path planner returning a path, with optimized code usually its not very long maybe just 1-3 time steps. During this delay the simulator will continue using points that it was last given, because of this its a good idea to store the last points you have used so you can have a smooth transition. previous_path_x, and previous_path_y can be helpful for this transition since they show the last points given to the simulator controller with the processed points already removed. You would either return a path that extends this previous path or make sure to create a new path that has a smooth transition with this last path.
 
