@@ -22,7 +22,7 @@ Because it’s convenient path planning was done in frenet coordinates which lat
 
 ### Cost functions
 Inspired by the extensive python example in the lecture the following cost functions have been implemented in C++:
-```
+```cpp
     double traffic_buffer_cost(const pair<Polynomial, Polynomial> &traj,
                                const vector<double> &goal, const vector<Vehicle> &vehicles);
     double efficiency_cost(const pair<Polynomial, Polynomial> &traj,
