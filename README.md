@@ -6,16 +6,35 @@
 In this project the goal is to safely navigate safely around a virtual three lane highway with other traffic that is driving with a speed close to the maximum 50 MPH speed limit around the track while avoiding collisions and other traffic incidents. The car's sensor fusion provides the state of the ego vehicle as well as the state of the other surrounding vehicles, also there is a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3 which captures the notion of a physically safe and comfortable car ride.
 
 ## Implementation
+### State machine
 A finite statemachine with transitions based on cost-functions is used to find the most convenient and safe path according to the objective of repeatedly driving around the test track without causing traffic incidents. The way the car responds to certain situation can be configured by cost-function weights, e.g. the penalty for staying a slow lane or high accelerations or frequent lane changes.
+
+### Jerk minimal trajectories
 The resulting jerk minimal trajectories are modelled using quintic (5th order) polynomials. Using quintic polynomials for describing sequential displacements has the advantage that by differentiating the displacement polynomial the acceleration as well as jerk are smooth and therefore don't have discontinuities across a path. Boundary conditions (displacement, velocity, acceleration, time-duration) for the start and end of a path are defined, such that we end up with three equations for final displacement, velocity and acceleration and three unknowns, which is a straightforward problem to solve.
 
 ???EQUATIONS???
 
 Because we are not using classical optimization of a trajectory over several constraints, similarily to the [MPC project](https://github.com/da-phil/SDC-Model-Predictive-Control), we pertubate the intial boundary condition parameters from the state machine by sampling from a distribution to be able to capture more cost-optimal trajectories.
 
+### Waypoints and smooth paths
 Because of the coarse and discrete nature of the track waypoints, a smooth function has to be fitted to the coordinates of the map. Compared to polynomials, splines have the advantage that the fitted spline function goes through all fitted points, therefore cubic splines have been used.
 As a really helpful resource for fitting cubic splines I was using the [open-source spline library from Tino
 Kluge](http://kluge.in-chemnitz.de/opensource/spline), which comes in a single hearder file and is really easy to use.
+
+In this project all track waypoints are provided at once in a .csv File. It would be possible to use the entire world at once to fit a spline through all waypoints, but it is not possible nor practical in reality. Moreover, it would have required special treatment to ensure a smooth transition when the S coordinate of the track wraps around back to 0 when one lap was completed.
+Instead, a local area with the 30 closest waypoints to the car is used and splines for X, Y, dX and dY in respect to S are fitted, which also makes the conversion from frenet to cartesian space smooth and jerk-free.
+
+## Code structure
+### main.cpp
+Interface code to simulator
+### trackmap.cpp
+Map functionaliy, using cubic splines to generate smooth paths in X/Y or frenet S/D coordinates
+### vehicle.cpp
+Class which stores kinematic values of a vehicle, instances of this class are used in the Trajectory class
+### polynomials.cpp
+General purpose helper class for using polynomials and their first and second derivative.
+### trajectoryGenerator.cpp
+Trajectory generator which implements the state machine and cost functions, it also contains a Trajectory helper class which instantiates Vehicle objects for every time instance.
 
 ## Results
 Here is a video of approx. 1.5x cycles around the highway track:
