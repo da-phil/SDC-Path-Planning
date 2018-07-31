@@ -142,7 +142,7 @@ int main() {
               lag = 0; // sim start
 
             vector<double> car_state = {car_local_s, car_d, mph2mps(car_speed)};
-            cout << "car state: s=" << car_s << ", car_d=" << car_d << ", speed=" << car_speed << endl;
+            cout << "car state s: " << car_s << ", d: " << car_d << ", speed (mph): " << car_speed << endl;
             auto trajectory = PTG.generate_trajectory(car_state, speed_limit, horizon, update_interval, lag, other_vehicles);
             update_interval = update_interval_global;
             horizon = horizon_global;
