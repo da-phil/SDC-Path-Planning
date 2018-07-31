@@ -5,6 +5,78 @@ using namespace Eigen;
 using namespace std;
 
 
+
+void Trajectory::removeFirstPoints(int numPoints) {
+    if (_traj.size() < numPoints)
+        return;
+    
+    _traj.erase(_traj.begin(), _traj.begin() + numPoints);
+}
+
+void Trajectory::removeLastPoints(int numPoints) {
+    if (_traj.size() < numPoints)
+        return;
+
+    _traj.erase(_traj.end() - numPoints, _traj.end());
+}
+
+vector<double> Trajectory::operator[](int T) {
+    return getState_at(T);
+}
+
+vector<double> Trajectory::getState_at(int T) {
+    if (!_generated) {
+        cerr << "Generate trajectory first!" << endl;
+        return {};
+    }
+    if (T >= _traj.size()) {
+        cerr << "Query at T=" << T << " out of bounds!" << endl;
+        return {};
+    }
+
+    vector<double> state = _traj[T].get_s();
+    auto d_vals = _traj[T].get_d();
+    state.insert(state.end(), d_vals.begin(), d_vals.end());
+    return state;
+}
+
+
+vector<vector<double>> Trajectory::getSD() {
+    int traj_size = _traj.size();
+    vector<double> s_list(traj_size);
+    vector<double> d_list(traj_size);
+
+    for (int i = 0; i < traj_size; i++) {
+        vector<double> s_state = _traj[i].get_s();
+        vector<double> d_state = _traj[i].get_d();    
+        s_list[i] = s_state[0]; // only take s component
+        d_list[i] = d_state[0]; // only take d component
+    }        
+    
+    return {s_list, d_list};
+}
+
+
+void Trajectory::generate(pair<Polynomial, Polynomial> &traj_coeffs,
+                          int samples)
+{
+    _traj.resize(samples);
+    for (int t = 0; t < samples; t++)
+    {
+        double s        = traj_coeffs.first.polyeval(t);
+        double s_d      = traj_coeffs.first.polyeval_d(t);
+        double s_dd     = traj_coeffs.first.polyeval_dd(t);            
+        double d        = traj_coeffs.second.polyeval(t);
+        double d_d      = traj_coeffs.second.polyeval_d(t);
+        double d_dd     = traj_coeffs.second.polyeval_dd(t);
+        _traj[t].set_frenet_state(s, s_d, s_dd, d, d_d, d_dd);
+    }
+    _generated = true;
+}
+
+
+
+
 /////////////////////////////////////////////////////////////////
 // Cost functions START
 /////////////////////////////////////////////////////////////////
