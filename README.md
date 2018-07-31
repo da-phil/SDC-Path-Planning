@@ -20,11 +20,29 @@ Eventually these trajectories are evaluated for feasibility (no collisions, does
 It was difficult to find accurate start car states (especially velocities and accelerations) for generating feasible trajectories. Therefore a history of previously planned car states is kept in the trajectory object within the planner for consecutive planning steps.
 Because it’s convenient path planning was done in frenet coordinates which later get converted into world X/Y coordinates by the map object.
 
+### Cost functions
+Inspired by the extensive python example in the lecture the following cost functions have been implemented in C++:
+```
+    double traffic_buffer_cost(const pair<Polynomial, Polynomial> &traj,
+                               const vector<double> &goal, const vector<Vehicle> &vehicles);
+    double efficiency_cost(const pair<Polynomial, Polynomial> &traj,
+                           const vector<double> &goal, const vector<Vehicle> &vehicles);
+    double total_accel_d_cost(const pair<Polynomial, Polynomial> &traj,
+                              const vector<double> &goal, const vector<Vehicle> &vehicles);
+    double total_accel_s_cost(const pair<Polynomial, Polynomial> &traj,
+                              const vector<double> &goal, const vector<Vehicle> &vehicles);
+    double total_jerk_cost(const pair<Polynomial, Polynomial> &traj,
+                           const vector<double> &goal, const vector<Vehicle> &vehicles);
+    double lane_depart_cost(const pair<Polynomial, Polynomial> &traj,
+                            const vector<double> &goal, const vector<Vehicle> &vehicles);
+    double traffic_ahead_cost(const pair<Polynomial, Polynomial> &traj,
+                              const vector<double> &goal, const vector<Vehicle> &vehicles);
+```
 
 ### Jerk minimal trajectories
 The resulting jerk minimal trajectories are modelled using quintic (5th order) polynomials. Using quintic polynomials for describing sequential displacements has the advantage that by differentiating the displacement polynomial the acceleration as well as jerk are smooth and therefore don't have discontinuities across a path. Boundary conditions (displacement, velocity, acceleration, time-duration) for the start and end of a path are defined, such that we end up with three equations for final displacement, velocity and acceleration and three unknowns, which is a straightforward problem to solve.
 
-???EQUATIONS???
+TODO: Equations!
 
 Because we are not using classical optimization of a trajectory over several constraints, similarily to the [MPC project](https://github.com/da-phil/SDC-Model-Predictive-Control), we pertubate the intial boundary condition parameters from the state machine by sampling from a distribution to be able to capture more cost-optimal trajectories.
 
@@ -46,6 +64,18 @@ To overcome discontinuities at each update interval the following steps are done
 * reuse a defined amount of previous path elements for consecutive planning steps
 * for each successive point, deltas in X and Y between the planning steps of the new path are added on top of the previous X and Y value. This adds a neglibible error of no more than the distance the car travels in one timestep (0.02s).
 
+### Covered corner cases
+
+#### Emergency brake
+
+In very rare occasions vehicles make aggressive lane changes and cut off our vehicle.
+In order to avoid a sudden collision emergency brake mode is activated and a hard braking maneuver is enforced. This prioritizes avoiding collisions over staying within comfort limits (acceleration and jerk) and therefore most likely causes an incident in the simulator. This high deceleration force is achieved by shortening the path update intervals and disables lane changes.
+It ignores comfort limits for decceleration force, shortens path update intervals and disallows lane changes (which are dangerous combined with the hard braking).
+
+#### Car gets stuck in slow traffic
+
+Sometimes when the car drives on one of the outside lanes it gets stuck behind slow traffic when the neighboring middle lane has equally slow traffic and gives a high cost to a lane change, even though the opposite lane is free.
+Identifying this situation and lowering the cost of the lane change to the middle lane solved this problem to "encourage" the car to make its way to the free lane.
 
 ## Code structure
 ### main.cpp
@@ -61,8 +91,16 @@ Trajectory generator which implements the state machine and cost functions, it a
 
 ## Results
 Here is a video of approx. 1.5x cycles around the highway track:
+
 [imgs/video2.mkv](imgs/video2.mp4)
 
+## Future work / TODO
+
+Because this project was already taking up quite a lot of time to bring it to a satifying result, here I give an outlook on further possible improvements:
+* Implement behaviour prediction for other cars using model based or data-driven (machine learning) approaches such as provided in the lectures, in order to allow the system to respond smarter to the surrounding traffic and to avoid very rare collision incidents which are hardly avoidable with the current, simple approach.
+* Improve path planning in situations where the car gets stuck even more by a more sophisticated method.
+* Improve the emergency braking and test it more, because it's needed only such rare cases that it's impossible to test and deubg
+    
 ## Running the code
 
 ### Dependencies
