@@ -14,6 +14,7 @@ The following states are used:
 * follow vehicle
 * lane change left
 * lane change right
+
 Based on the current situation possible transitions to future states are activated or deactivated.
 Trajectories for all possible future states are then generated with default values which get further perturbed to add potentially more cost-efficient variations.
 Eventually these trajectories are evaluated for feasibility (no collisions, does not exceed acceleration and jerk limit, etc). Non-feasible trajectories are marked with a very high cost, such that only feasible trajectories are compared against each other with the "cheapest" trajectory becoming the output of the path planner. All trajectories are weighted according to preferences reflected in the weights.
