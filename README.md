@@ -1,6 +1,6 @@
 # Pathplanning project
 
-![](imgs/path_planning.gif)
+![](imgs/video1.gif)
 
 ## Goals
 In this project the goal is to safely navigate safely around a virtual three lane highway with other traffic that is driving with a speed close to the maximum 50 MPH speed limit around the track while avoiding collisions and other traffic incidents. The car's sensor fusion provides the state of the ego vehicle as well as the state of the other surrounding vehicles, also there is a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3 which captures the notion of a physically safe and comfortable car ride.
@@ -16,6 +16,10 @@ Because we are not using classical optimization of a trajectory over several con
 Because of the coarse and discrete nature of the track waypoints, a smooth function has to be fitted to the coordinates of the map. Compared to polynomials, splines have the advantage that the fitted spline function goes through all fitted points, therefore cubic splines have been used.
 As a really helpful resource for fitting cubic splines I was using the [open-source spline library from Tino
 Kluge](http://kluge.in-chemnitz.de/opensource/spline), which comes in a single hearder file and is really easy to use.
+
+## Results
+Here is a video of approx. 1.5x cycles around the highway track:
+[imgs/video2.mkv](imgs/video2.mkv)
 
 ## Running the code
 
