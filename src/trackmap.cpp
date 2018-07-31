@@ -304,7 +304,7 @@ void trackmap::getSmoothPath(const vector<vector<double>> &prevPath, vector<vect
         }
     }
 
-    // assemble rest of the path and smooth, if applicable
+    // assemble rest of the path by adding up deltas in X and Y
     for(int i = reusePoints; i < newPath[0].size(); i++) {
         xy_planned = getXY_splines(newPath[0][i], newPath[1][i]);
         if (prevPathSize > 0) {
