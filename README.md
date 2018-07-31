@@ -33,6 +33,9 @@ Because of the coarse and discrete nature of the track waypoints, a smooth funct
 As a really helpful resource for fitting cubic splines I was using the [open-source spline library from Tino
 Kluge](http://kluge.in-chemnitz.de/opensource/spline), which comes in a single hearder file and is really easy to use.
 
+The following plot shows the track waypoints and a cubic spline fitted to them:
+![](imgs/spline_interpolation.png)
+
 In this project all track waypoints are provided at once in a .csv File. It would be possible to use the entire world at once to fit a spline through all waypoints, but it is not possible nor practical in reality. Moreover, it would have required special treatment to ensure a smooth transition when the S coordinate of the track wraps around back to 0 when one lap was completed.
 Instead, a local area with the 30 closest waypoints to the car is used and splines for X, Y, dX and dY in respect to S are fitted, which also makes the conversion from frenet to cartesian space smooth and jerk-minimal.
 
