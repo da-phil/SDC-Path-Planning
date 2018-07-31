@@ -151,7 +151,7 @@ int main() {
               update_interval = horizon - 50;
             } else if (PTG.get_current_action() == "emergency") {
               cout << "Emergency!" << endl;
-              //horizon = 120;
+              horizon = 120;
               update_interval = horizon - 80;
             }
             

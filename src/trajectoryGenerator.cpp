@@ -415,13 +415,13 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
   vector<vector<double>> traj_goals;
   vector<double> traj_costs;
   vector<string> traj_states;
-  /////////////////////////////////////////////////////////////////
+
+
   // Find feasable next states from previous states:
   // - go straight
-  // - go straight following leading vehicle
+  // - go straight and follow vehicle in front
   // - lane change left
   // - lane change right
-  /////////////////////////////////////////////////////////////////
   bool go_straight = true;
   bool go_straight_follow_lead = false;
   bool change_left  = false;
@@ -452,10 +452,9 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     }
   }
   
-  // special case:
-  // - vehicle is in inner/outer lane with traffic, middle lane has similar traffic
-  //   but opposite lane is open. Need to nudge it towards middle lane which
-  //   which is a transition it would otherwise not make
+  // Special case:
+  //   Vehicle is in inner/outer lane with traffic, middle lane has similar traffic but opposite lane is free.
+  //   Need to get to the middle lane in order to "escape".
   bool prefer_mid_lane = false;
   if ((cur_lane == 0) || (cur_lane == 2))
   {
@@ -463,11 +462,14 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     vector<double> closest_veh_s_midLane  = vehicles[closest_vehicle[1]].get_s();
     vector<double> closest_veh_s_opLane   = vehicles[closest_vehicle[abs(cur_lane - 2)]].get_s();
     // traffic in current lane
-    if (abs(closest_veh_s_curLane[0] - start_s[0]) <  2 * _col_buf_length) {
+    if (abs(closest_veh_s_curLane[0] - start_s[0]) <  2 * _col_buf_length)
+    {
       // traffic in middle lane
-      if (abs(closest_veh_s_midLane[0] - start_s[0]) <  2 * _col_buf_length) {
-      // no traffic on opposite lane
-        if (abs(closest_veh_s_opLane[0] - start_s[0]) >  4 * _col_buf_length) {
+      if (abs(closest_veh_s_midLane[0] - start_s[0]) <  2 * _col_buf_length)
+      {
+        // no traffic on opposite lane
+        if (abs(closest_veh_s_opLane[0] - start_s[0]) >  4 * _col_buf_length)
+        {
           prefer_mid_lane = true;
           if (cur_lane == 0) {
             change_right = true;
@@ -480,9 +482,9 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
   }
   
   /////////////////////////////////////////////////////////////////
-  // GENERATE GOALPOINTS
+  // Generate goal positions for trajectories
   /////////////////////////////////////////////////////////////////
-  // GO STRAIGHT
+  // Go straight
   if (go_straight) {
     double goal_s_pos = start_s[0] + _delta_s_maxspeed;
     double goal_s_vel = _max_dist_per_timestep;
@@ -497,12 +499,11 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
       traj_states.push_back("straight");
   }
   
-  // FOLLOW OTHER VEHICLE
+  // Follow vehicle in front
   if (go_straight_follow_lead) {
     vector<double> lead_s = vehicles[closest_vehicle[cur_lane]].get_s();
     
-    // "EMERGENCY BREAK ASSIST" to the drive assist
-    // if much slower vehicle pulls into lane dangerously close in front of us,
+    // Emergency break, if much slower vehicle pulls into lane dangerously close in front of us
     if (((lead_s[0] - start_s[0]) < _col_buf_length * 0.5) && (lead_s[1] < start_s[1] * 0.8)) {
       cout << "EMERGENCY" << endl;
       // reducing horizon to reduce speed faster
@@ -606,13 +607,14 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
   vector<vector<double>> all_costs;
   for (int i = 0; i < traj_coeffs.size(); i++) {
     double cost = calculate_cost(traj_coeffs[i], traj_goals[i], vehicles, all_costs);
-    // if appropriate, scale costs for trajectories going to the middle lane
-    if (prefer_mid_lane && (abs(convert_lane_to_d(1) - traj_coeffs[i].second.polyeval(_horizon)) < 1.0))
+    // if applicable, reduce costs of a lane change that gets us closer to the lane with less traffic
+    if (prefer_mid_lane && (abs(convert_lane_to_d(1) - traj_coeffs[i].second.polyeval(_horizon)) < 1.0)) {
       cost *= 0.5;
+    }
     traj_costs.push_back(cost);
   }
     
-  // choose least-cost trajectory
+  // select least-cost trajectory
   double min_cost = traj_costs[0];
   int min_cost_traj_num = 0;
   for (int i = 1; i < traj_coeffs.size(); i++) {
@@ -621,11 +623,12 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
       min_cost_traj_num = i;
     }
   }
-  // rare edge case: vehicle is stuck in infeasible trajectory (usually stuck close behind other car)
+
+  // dealing with rare corner case: vehicle is stuck in infeasible trajectory (usually stuck close behind other car)
   if (min_cost == 1e10) {
     double min_s = traj_coeffs[0].first.polyeval(_horizon);
     int min_s_num = 0;
-    // find trajectory going straight with minimum s
+    // find generated trajectory going straight with minimum s
     for (int i = 1; i <= _goal_perturb_samples; i++) {
       if (traj_coeffs[i].first.polyeval(_horizon) < min_s){
         min_s = traj_coeffs[i].first.polyeval(_horizon);
@@ -636,9 +639,10 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
   }
   
   _current_action = "straight";
-  if (min_cost_traj_num > _goal_perturb_samples) {
+  if (traj_states[min_cost_traj_num] == "left" || traj_states[min_cost_traj_num] == "right") {
     _current_action = "lane_change";  
   }
+
   /*
   for (int i = 0;  i < traj_states.size(); i++) {
     cout << "cost[" << traj_states[i] << "]: " << traj_costs[i] << endl;
@@ -657,6 +661,7 @@ Trajectory TrajectoryGenerator::generate_trajectory(const vector<double> &start,
     }    
   }
   */
+
   cout << "chosen maneuver:     " << traj_states[min_cost_traj_num] << " (s: "
        << goal_points[min_cost_traj_num][0] << " / d: "
        << goal_points[min_cost_traj_num][3] << ")"  << endl;
