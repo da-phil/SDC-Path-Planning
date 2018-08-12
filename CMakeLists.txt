@@ -17,7 +17,6 @@ set(sources
 	src/main.cpp
 	src/tools.cpp
 	src/trackmap.cpp
-	#src/trajectory_generation.cpp
 	src/trajectoryGenerator.cpp
 	src/polynomials.cpp
 	src/vehicle.cpp
